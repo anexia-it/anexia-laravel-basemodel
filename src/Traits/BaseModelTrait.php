@@ -2,6 +2,7 @@
 
 namespace Anexia\BaseModel\Traits;
 
+use Anexia\BaseModel\Interfaces\BaseModelInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\RelationNotFoundException;
@@ -15,19 +16,22 @@ use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Lang;
 
-trait ExtendedModel
+trait BaseModelTrait
 {
+    /** @var int */
+    protected static $pagination = 10;
+
     /**
      * BaseModel constructor.
      * @param array $attributes
-     * @param User|null $currentUser
+     * @param Model|null $currentUser
      */
-    public function __construct(array $attributes = [], User $currentUser = null)
+    public function __construct(array $attributes = [], Model $currentUser = null)
     {
         parent::__construct($attributes);
 
-        if (!$currentUser instanceof User && Auth::check()) {
-            $currentUser = Auth::user();
+        if (!$currentUser instanceof Model) {
+            $currentUser = self::getCurrentAuthUser();
         }
 
         $defaults = $this::getDefaults($currentUser);
@@ -39,10 +43,27 @@ trait ExtendedModel
     }
 
     /**
-     * @return int
+     * @param int $pagination
      */
-    public static function getDefaultPagination() {
-        return 10;
+    protected static function setPagination($pagination)
+    {
+        self::$pagination = $pagination;
+    }
+
+    /**
+     * Can be overwritten to support different auth
+     *
+     * @return Model|null
+     */
+    public static function getCurrentAuthUser()
+    {
+        $currentUser = null;
+
+        if (Auth::check()) {
+            $currentUser = Auth::user();
+        }
+
+        return $currentUser;
     }
 
     /**
@@ -55,10 +76,10 @@ trait ExtendedModel
     }
 
     /**
-     * @param User|null $currentUser
+     * @param Model|null $currentUser
      * @return array
      */
-    public static function getDefaults(User $currentUser = null)
+    public static function getDefaults(Model $currentUser = null)
     {
         // return attributes' default values in each model
         return [];
@@ -89,7 +110,7 @@ trait ExtendedModel
      */
     public static function getAllRelationships($list = false, $excludeUnmodifieable = true)
     {
-        /** @var ExtendedModel $modelClass */
+        /** @var BaseModelInterface $modelClass */
         $modelClass = get_called_class();
 
         /** @var Model $instance */
@@ -132,7 +153,7 @@ trait ExtendedModel
      * @param string $relation
      * @param int|null $id
      * @param bool|false $assign
-     * @return ExtendedModel|null
+     * @return BaseModelInterface|null
      */
     public function getRelatedObject($relation, $id = null, &$assign = false)
     {
@@ -145,7 +166,7 @@ trait ExtendedModel
                  * assign the object to the relation if no assignment for this relation exists or
                  * if a different object is currently assigned (has a different id)
                  */
-                if (!$this->$relation instanceof ExtendedModel || $this->$relation->id != $id) {
+                if (!$this->$relation instanceof BaseModelInterface || $this->$relation->id != $id) {
                     $assign = true;
                 }
             } else if (isset($relationships['many'][$relation])) {
@@ -174,15 +195,14 @@ trait ExtendedModel
     }
 
     /**
-     * @param ExtendedModel $object
+     * @param BaseModelInterface $object
      * @param string $relation
-     * @param ExtendedModel|null $relatedObject
+     * @param Model|null $relatedObject
      * @param Request|null $request
      * @return bool
      */
-    public static function isEditableRelationship(ExtendedModel $object, $relation, ExtendedModel $relatedObject = null,
-                                                  Request $request = null
-    )
+    public static function isEditableRelationship(BaseModelInterface $object, $relation, Model $relatedObject = null,
+                                                  Request $request = null)
     {
         $relationship = null;
         $relationships = $object::getAllRelationships();
@@ -272,10 +292,10 @@ trait ExtendedModel
     /**
      * Extended validation to check that the $object's contents meet the application's logical requirements
      *
-     * @param User|null $currentUser
+     * @param Model|null $currentUser
      * @throws \Exception
      */
-    public function validateAttributeLogic(User $currentUser = null)
+    public function validateAttributeLogic(Model $currentUser = null)
     {
         // add logical validation of model's attributes in each model
     }
@@ -286,7 +306,7 @@ trait ExtendedModel
      */
     public function getAllAttributes($excludeUnmodifieable = true)
     {
-        /** @var ExtendedModel $modelClass */
+        /** @var BaseModelInterface $modelClass */
         $modelClass = get_called_class();
 
         /** @var Model $instance */
@@ -315,8 +335,7 @@ trait ExtendedModel
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
     public static function allExtended(Request $request, $preSetFilters = [], $preSetOrFilters = [],
-                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = []
-    )
+                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = [])
     {
         $filters = $preSetFilters;
         $orFilters = $preSetOrFilters;
@@ -324,12 +343,12 @@ trait ExtendedModel
         $searches = $preSetSearches;
         $orSearches = $preSetOrSearches;
 
-        /** @var ExtendedModel $modelClass */
+        /** @var BaseModelInterface $modelClass */
         $modelClass = get_called_class();
         $sortings = $modelClass::getDefaultSorting();
         // use 1 as default page
         $page = 1;
-        $pagination = $modelClass::getDefaultPagination();
+        $pagination = $modelClass::$pagination;
 
         $getParams = $request->query();
         self::extractFromParams($getParams, $modelClass, $page, $pagination, $includes, $sortings, $searches, $filters);
@@ -402,7 +421,7 @@ trait ExtendedModel
                                               &$searches = [], &$filters = [])
     {
         if (!empty($params)) {
-            /** @var ExtendedModel $instance */
+            /** @var BaseModelInterface $instance */
             $instance = new $modelClass;
             $attributes = $instance->getAllAttributes();
 
@@ -607,7 +626,8 @@ trait ExtendedModel
      * @param Builder $query
      * @param array $searches
      */
-    public static function addSearches(Builder &$query, $searches = []) {
+    public static function addSearches(Builder &$query, $searches = [])
+    {
         if (!empty($searches)) {
             foreach ($searches as $attribute => $value) {
                 $scopes = explode('.', $attribute);
