@@ -98,7 +98,7 @@ class BaseModelController extends BaseController
              * @throws ValidationException
              * @throws ModelNotFoundException
              */
-            $object->validateAttributeLogic($curUser);
+            $object->validateAttributeLogic();
 
             if (!empty($relationsToLoad)) {
                 $this->loadRelations($object, $relationsToLoad);

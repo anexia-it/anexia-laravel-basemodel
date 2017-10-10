@@ -291,10 +291,9 @@ trait BaseModelTrait
     /**
      * Extended validation to check that the $object's contents meet the application's logical requirements
      *
-     * @param Model|null $currentUser
      * @throws \Exception
      */
-    public function validateAttributeLogic(Model $currentUser = null)
+    public function validateAttributeLogic()
     {
         // add logical validation of model's attributes in each model
     }
