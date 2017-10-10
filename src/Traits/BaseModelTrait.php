@@ -352,7 +352,18 @@ trait BaseModelTrait
         $pagination = $modelClass::$pagination;
 
         $getParams = $request->query();
-        self::extractFromParams($getParams, $modelClass, $page, $pagination, $includes, $sortings, $searches, $filters);
+        self::extractFromParams(
+            $getParams,
+            $modelClass,
+            $page,
+            $pagination,
+            $includes,
+            $sortings,
+            $filters,
+            $orFilters,
+            $searches,
+            $orSearches
+        );
 
         /**
          * set pagination
@@ -415,12 +426,14 @@ trait BaseModelTrait
      * @param int $pagination; 10 by default
      * @param array $includes
      * @param array $sortings
-     * @param array $searches
      * @param array $filters
+     * @param array $orFilters
+     * @param array $searches
+     * @param array $orSearches
      */
     private static function extractFromParams($params, $modelClass, &$page = 1,
-                                              &$pagination = 10, &$includes = [], &$sortings = [],
-                                              &$searches = [], &$filters = [])
+                                              &$pagination = 10, &$includes = [], &$sortings = [], &$filters = [],
+                                              &$orFilters = [], &$searches = [], &$orSearches = [])
     {
         if (!empty($params)) {
             /** @var BaseModelInterface $instance */
@@ -515,12 +528,12 @@ trait BaseModelTrait
                     }
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $searches[$searchField][] = '%' . $values . '%';
+                            $orSearches[$searchField][] = '%' . $values . '%';
                         }
                     }
                 } else {
                     foreach ($searchFields as $searchField) {
-                        $searches[$searchField] = '%' . $params['search'] . '%';
+                        $orSearches[$searchField] = '%' . $params['search'] . '%';
                     }
                 }
 
@@ -550,12 +563,12 @@ trait BaseModelTrait
                     }
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $searches[$searchField][] = $values . '%';
+                            $orSearches[$searchField][] = $values . '%';
                         }
                     }
                 } else {
                     foreach ($searchFields as $searchField) {
-                        $searches[$searchField] = $params['search_start'] . '%';
+                        $orSearches[$searchField] = $params['search_start'] . '%';
                     }
                 }
 
@@ -585,12 +598,12 @@ trait BaseModelTrait
                     }
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $searches[$searchField][] = '%' . $values;
+                            $orSearches[$searchField][] = '%' . $values;
                         }
                     }
                 } else {
                     foreach ($searchFields as $searchField) {
-                        $searches[$searchField] = '%' . $params['search_end'];
+                        $orSearches[$searchField] = '%' . $params['search_end'];
                     }
                 }
 
@@ -747,13 +760,13 @@ trait BaseModelTrait
                         self::orSearchRelation($q, $relation, $scopes, $values);
                     } else {
                         if (is_array($values)) {
-                            $q->where(function ($qu) use ($attribute, $values) {
+                            $q->orWhere(function ($qu) use ($attribute, $values) {
                                 foreach ($values as $value) {
                                     $qu->orWhere($attribute, 'ILIKE', $value);
                                 }
                             });
                         } else {
-                            $q->where($attribute, 'ILIKE', $values);
+                            $q->orWhere($attribute, 'ILIKE', $values);
                         }
                     }
                 }
