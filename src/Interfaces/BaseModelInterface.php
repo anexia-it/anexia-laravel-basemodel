@@ -77,11 +77,11 @@ interface BaseModelInterface
      * @param BaseModelInterface $object
      * @param string $relation
      * @param Model|null $relatedObject
-     * @param Request|null $request
+     * @param array $values
      * @return bool
      */
     public static function isEditableRelationship(BaseModelInterface $object, $relation, Model $relatedObject = null,
-                                                  Request $request = null);
+                                                  $values = []);
 
     /**
      * @param $relation
@@ -91,10 +91,9 @@ interface BaseModelInterface
 
     /**
      * @param bool|true $checkCompletion
-     * @param Request|null $request
      * @return array
      */
-    public static function getValidationRules($checkCompletion = true, Request $request = null);
+    public static function getValidationRules($checkCompletion = true);
 
     /**
      * Extended validation to check that the $object's contents meet the application's logical requirements
@@ -113,7 +112,7 @@ interface BaseModelInterface
     /**
      * Get all models (filtered, sorted, paginated, with their included relation objects) from the database.
      *
-     * @param Request $request
+     * @param array $columns
      * @param array|mixed $preSetFilters
      * @param array|mixed $preSetOrFilters
      * @param array|mixed $preSetIncludes
@@ -121,9 +120,8 @@ interface BaseModelInterface
      * @param array|mixed $preSetOrSearches
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
-    public static function allExtended(Request $request, $preSetFilters = [], $preSetOrFilters = [],
-                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = []
-    );
+    public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [],
+                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = []);
 
     /**
      * add WHERE conditions to a query
@@ -184,13 +182,13 @@ interface BaseModelInterface
     public static function addIncludes(LengthAwarePaginator &$paginator, $includes = []);
 
     /**
-     * @param $id
-     * @param Request $request
+     * @param array $columns
+     * @param int $id
      * @param array $preSetFilters
      * @param array $preSetIncludes
      * @return Model
      */
-    public static function findExtended($id, Request $request, $preSetFilters = [], $preSetIncludes = []);
+    public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = []);
 
     /**
      * @param string $relation

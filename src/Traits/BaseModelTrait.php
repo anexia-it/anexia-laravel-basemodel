@@ -153,7 +153,7 @@ trait BaseModelTrait
      * @param string $relation
      * @param int|null $id
      * @param bool|false $assign
-     * @return BaseModelInterface|null
+     * @return Model|null
      */
     public function getRelatedObject($relation, $id = null, &$assign = false)
     {
@@ -198,11 +198,11 @@ trait BaseModelTrait
      * @param BaseModelInterface $object
      * @param string $relation
      * @param Model|null $relatedObject
-     * @param Request|null $request
+     * @param array $values
      * @return bool
      */
     public static function isEditableRelationship(BaseModelInterface $object, $relation, Model $relatedObject = null,
-                                                  Request $request = null)
+                                                  $values = [])
     {
         $relationship = null;
         $relationships = $object::getAllRelationships();
@@ -236,8 +236,8 @@ trait BaseModelTrait
                                     switch ($operator) {
                                         default:
                                             if ($relatedObject->$attribute != $value
-                                                && (!$request->exists($attribute)
-                                                    || $request->input($attribute) != $value)
+                                                && (!array_key_exists($attribute, $values)
+                                                    || $values[$attribute] != $value)
                                             ) {
                                                 $valid = false;
                                             }
@@ -280,10 +280,9 @@ trait BaseModelTrait
 
     /**
      * @param bool|true $checkCompletion
-     * @param Request|null $request
      * @return array
      */
-    public static function getValidationRules($checkCompletion = true, Request $request = null)
+    public static function getValidationRules($checkCompletion = true)
     {
         // return array of all validationRules in each model
         return [];
@@ -326,7 +325,7 @@ trait BaseModelTrait
     /**
      * Get all models (filtered, sorted, paginated, with their included relation objects) from the database.
      *
-     * @param Request $request
+     * @param array $columns
      * @param array|mixed $preSetFilters
      * @param array|mixed $preSetOrFilters
      * @param array|mixed $preSetIncludes
@@ -334,9 +333,11 @@ trait BaseModelTrait
      * @param array|mixed $preSetOrSearches
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
-    public static function allExtended(Request $request, $preSetFilters = [], $preSetOrFilters = [],
+    public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [],
                                        $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = [])
     {
+        $request = request();
+
         $filters = $preSetFilters;
         $orFilters = $preSetOrFilters;
         $includes = $preSetIncludes;
@@ -360,6 +361,7 @@ trait BaseModelTrait
             return $page;
         });
 
+        /** @var Builder $query */
         $query = $modelClass::query();
 
         /**
@@ -373,12 +375,12 @@ trait BaseModelTrait
         // (->orWhere('field', 'attribute1')->orWhere('field', 'attribute2'))
         self::addOrFilters($query, $orFilters);
 
-        // add LIKE filters
-        // (->where('field', 'LIKE', '%attribute%'))
+        // add ILIKE filters
+        // (->where('field', 'ILIKE', '%attribute%'))
         self::addSearches($query, $searches);
 
-        // add OR LIKE filters
-        // (->orWhere('field', 'LIKE', '%attribute1%')->orWhere('field', 'LIKE', '%attribute2%'))
+        // add OR ILIKE filters
+        // (->orWhere('field', 'ILIKE', '%attribute1%')->orWhere('field', 'ILIKE', '%attribute2%'))
         self::addOrSearches($query, $orSearches);
 
         /**
@@ -392,7 +394,7 @@ trait BaseModelTrait
          * pagination
          */
         /** @var LengthAwarePaginator $lAPaginator */
-        $lAPaginator = $query->paginate($pagination);
+        $lAPaginator = $query->paginate($pagination, $columns);
 
         /**
          * inclusion
@@ -489,6 +491,7 @@ trait BaseModelTrait
             /**
              * set search filters
              */
+            // ILIKE '%value%'
             if (isset($params['search'])) {
                 $searchFields = $instance::getDefaultSearch();
                 if (is_array($params['search'])) {
@@ -522,6 +525,76 @@ trait BaseModelTrait
                 }
 
                 unset($params['search']);
+            }
+            // ILIKE 'value%'
+            if (isset($params['search_start'])) {
+                $searchFields = $instance::getDefaultSearch();
+                if (is_array($params['search_start'])) {
+                    $defaultValues = [];
+                    foreach ($params['search_start'] as $key => $values) {
+                        if (is_array($values)) {
+                            if (is_int($key)) {
+                                $defaultValues = array_merge($defaultValues, $values);
+                            } else {
+                                foreach ($values as $value) {
+                                    $searches[$key][] = $value . '%';
+                                }
+                            }
+                        } else {
+                            if (is_int($key)) {
+                                $defaultValues[] = $values;
+                            } else {
+                                $searches[$key][] = $values . '%';
+                            }
+                        }
+                    }
+                    foreach ($searchFields as $searchField) {
+                        foreach ($defaultValues as $values) {
+                            $searches[$searchField][] = $values . '%';
+                        }
+                    }
+                } else {
+                    foreach ($searchFields as $searchField) {
+                        $searches[$searchField] = $params['search_start'] . '%';
+                    }
+                }
+
+                unset($params['search_start']);
+            }
+            // ILIKE '%value'
+            if (isset($params['search_end'])) {
+                $searchFields = $instance::getDefaultSearch();
+                if (is_array($params['search_end'])) {
+                    $defaultValues = [];
+                    foreach ($params['search_end'] as $key => $values) {
+                        if (is_array($values)) {
+                            if (is_int($key)) {
+                                $defaultValues = array_merge($defaultValues, $values);
+                            } else {
+                                foreach ($values as $value) {
+                                    $searches[$key][] = '%'. $value;
+                                }
+                            }
+                        } else {
+                            if (is_int($key)) {
+                                $defaultValues[] = $values;
+                            } else {
+                                $searches[$key][] = '%'. $values;
+                            }
+                        }
+                    }
+                    foreach ($searchFields as $searchField) {
+                        foreach ($defaultValues as $values) {
+                            $searches[$searchField][] = '%' . $values;
+                        }
+                    }
+                } else {
+                    foreach ($searchFields as $searchField) {
+                        $searches[$searchField] = '%' . $params['search_end'];
+                    }
+                }
+
+                unset($params['search_end']);
             }
 
             /**
@@ -619,9 +692,9 @@ trait BaseModelTrait
     }
 
     /**
-     * add WHERE LIKE conditions to a query
-     * to only return results that are like certain filter criteria
-     * (->where('field', 'LIKE', '%attribute%'))
+     * add WHERE ILIKE conditions to a query
+     * to only return results that are (case insensitive) like certain filter criteria
+     * (->where('field', 'ILIKE', '%attribute%'))
      *
      * @param Builder $query
      * @param array $searches
@@ -653,9 +726,9 @@ trait BaseModelTrait
     }
 
     /**
-     * add WHERE LIKE OR LIKE conditions to a query
-     * to only return restults that are like one of many filter criteria
-     * (->orWhere('field', 'LIKE', '%attribute1%')->orWhere('field', 'LIKE', '%attribute2%'))
+     * add WHERE ILIKE OR ILIKE conditions to a query
+     * to only return restults that are (case insensitive) like one of many filter criteria
+     * (->orWhere('field', 'ILIKE', '%attribute1%')->orWhere('field', 'ILIKE', '%attribute2%'))
      *
      * @param Builder $query
      * @param array $orSearches
@@ -788,7 +861,7 @@ trait BaseModelTrait
      */
     private static function searchRelation(Builder &$query, $relation = '', $attribute = [], $value = '')
     {
-        // get entity that has relation with certain attribute LIKE the value
+        // get entity that has relation with certain attribute ILIKE the value
         $query->whereHas($relation, function ($q) use ($attribute, $value) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
@@ -817,7 +890,7 @@ trait BaseModelTrait
      */
     private static function orSearchRelation(Builder &$query, $relation = '', $attribute = [], $values = [])
     {
-        // get entity that has relation with certain attribute LIKE the value
+        // get entity that has relation with certain attribute ILIKE the value
         $query->orWhereHas($relation, function ($q) use ($attribute, $values) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
@@ -839,14 +912,16 @@ trait BaseModelTrait
     }
 
     /**
-     * @param $id
-     * @param Request $request
+     * @param int $id
+     * @param array $columns
      * @param array $preSetFilters
      * @param array $preSetIncludes
      * @return Model
      */
-    public static function findExtended($id, Request $request, $preSetFilters = [], $preSetIncludes = [])
+    public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = [])
     {
+        $request = request();
+
         $filters = $preSetFilters;
         $includes = $preSetIncludes;
         /** @var Model $modelClass */
@@ -899,10 +974,10 @@ trait BaseModelTrait
                     }
                 }
                 /** @var Model $entity */
-                $entity = $query->with($formattedIncludes)->firstOrFail();
+                $entity = $query->with($formattedIncludes)->firstOrFail($columns);
             } else {
                 /** @var Model $entity */
-                $entity = $modelClass::with($formattedIncludes)->find($id);
+                $entity = $modelClass::with($formattedIncludes)->find($id, $columns);
             }
         } catch (RelationNotFoundException $e) {
             $message = Lang::get(
@@ -917,6 +992,7 @@ trait BaseModelTrait
 
     /**
      * @param string $relation
+     * @throws \Exception
      */
     public function clearRelation($relation = '')
     {
@@ -971,8 +1047,9 @@ trait BaseModelTrait
     }
 
     /**
-     * @param string $relation
+     * @param $relation
      * @param Model $relatedObject
+     * @throws \Exception
      */
     public function unrelate($relation, Model $relatedObject)
     {

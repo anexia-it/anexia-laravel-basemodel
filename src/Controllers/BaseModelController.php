@@ -46,17 +46,17 @@ class BaseModelController extends BaseController
      * Recursively manage relations according to submitted request data
      *
      * @param BaseModelInterface $object
-     * @param Request $request
+     * @param array $requestParams
      * @param bool|true $checkCompletion
      * @param bool|true $manageTransaction
      * @param array $relationsToLoad
      * @throws BulkValidationException
      */
-    protected function editObjectContents(BaseModelInterface &$object, Request $request, $checkCompletion = true,
+    protected function editObjectContents(BaseModelInterface &$object, $requestParams = [], $checkCompletion = true,
                                           $manageTransaction = true, &$relationsToLoad = [])
     {
         /** @var Model $curUser */
-        $curUser = $request->user();
+        $curUser = request()->user();
         /** @var array $errorMessages */
         $errorMessages = [];
 
@@ -74,14 +74,14 @@ class BaseModelController extends BaseController
              */
             $this->setObjectAttributes(
                 $object,
-                $request,
-                $object::getValidationRules($checkCompletion, $request)
+                $requestParams,
+                $object::getValidationRules($checkCompletion)
             );
 
             /**
              * recursively add/fill/remove all required relations
              */
-            $this->manageRequiredRelations($object, $request, $errorMessages, $relationsToLoad);
+            $this->manageRequiredRelations($object, $requestParams, $errorMessages, $relationsToLoad);
 
             /**
              * save the object (it has an id from here on out, necessary for the optional relations)
@@ -91,7 +91,7 @@ class BaseModelController extends BaseController
             /**
              * recursively add/fill/remove all optional (not required) relations
              */
-            $this->manageOptionalRelations($object, $request, $errorMessages, $relationsToLoad);
+            $this->manageOptionalRelations($object, $requestParams, $errorMessages, $relationsToLoad);
 
             /**
              * check content logic
@@ -211,20 +211,18 @@ class BaseModelController extends BaseController
      * Loop through all relations given in the request that are required (not nullable) for the object
      *
      * @param BaseModelInterface $object
-     * @param Request $request
+     * @param array $requestParams
      * @param array $errorMessages
      * @param array $relationsToLoad
      */
-    private function manageRequiredRelations(BaseModelInterface &$object, Request $request, &$errorMessages,
+    private function manageRequiredRelations(BaseModelInterface &$object, $requestParams = [], &$errorMessages,
                                              &$relationsToLoad
     )
     {
         /** @var Model $curUser */
-        $curUser = $request->user();
+        $curUser = request()->user();
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
-        /** @var array $postParams */
-        $postParams = $request->all();
 
         /**
          * manage required to-one relations of the $relatedObject
@@ -233,7 +231,7 @@ class BaseModelController extends BaseController
          * @var string $relation - current relation name from request
          * @var array $values - current relation values (attributes) from request
          */
-        foreach ($postParams as $relation => $values) {
+        foreach ($requestParams as $relation => $values) {
             // if parameter ends with _id convert it to relation and add the id to $values
             $origLength = strlen($relation);
             $relation = preg_replace('/\_id$/','',$relation);
@@ -261,7 +259,6 @@ class BaseModelController extends BaseController
                 $relationsToLoad[$relation] = [];
                 $this->recursivelyManageRelation(
                     $object,
-                    $request,
                     $curUser,
                     $errorMessages,
                     $relation,
@@ -278,26 +275,24 @@ class BaseModelController extends BaseController
      * Loop through all relations given in the request that are optional (nullable) for the object
      *
      * @param BaseModelInterface $object
-     * @param Request $request
+     * @param array $requestParams
      * @param array $errorMessages
      * @param array $relationsToLoad
      */
-    private function manageOptionalRelations(BaseModelInterface &$object, Request $request, &$errorMessages,
+    private function manageOptionalRelations(BaseModelInterface &$object, $requestParams = [], &$errorMessages,
                                              &$relationsToLoad
     )
     {
         /** @var Model $curUser */
-        $curUser = $request->user();
+        $curUser = request()->user();
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
-        /** @var array $postParams */
-        $postParams = $request->all();
 
         /**
          * remove _id params if their corresponding relationship is given
          */
         $prettyParams = [];
-        foreach ($postParams as $relation => $values) {
+        foreach ($requestParams as $relation => $values) {
             // if parameter ends with _id convert it to relation and add the id to $values
             $origLength = strlen($relation);
             $relation = preg_replace('/\_id$/','',$relation);
@@ -351,7 +346,6 @@ class BaseModelController extends BaseController
                 } else {
                     $this->recursivelyManageRelation(
                         $object,
-                        $request,
                         $curUser,
                         $errorMessages,
                         $relation,
@@ -389,7 +383,6 @@ class BaseModelController extends BaseController
                         // only one to many values set given
                         $this->recursivelyManageRelation(
                             $object,
-                            $request,
                             $curUser,
                             $errorMessages,
                             $relation,
@@ -403,7 +396,6 @@ class BaseModelController extends BaseController
                         foreach ($values as $singleRelationValues) {
                             $this->recursivelyManageRelation(
                                 $object,
-                                $request,
                                 $curUser,
                                 $errorMessages,
                                 $relation,
@@ -435,7 +427,6 @@ class BaseModelController extends BaseController
      * Recursively add and edit a new/existing object to a relations according to submitted request data
      *
      * @param BaseModelInterface $object
-     * @param Request $request
      * @param Model $currentUser
      * @param $errorMessages
      * @param string $relation
@@ -444,10 +435,9 @@ class BaseModelController extends BaseController
      * @param array $managedRelationIds
      * @param array $relationsToLoad
      */
-    protected function recursivelyManageRelation(BaseModelInterface &$object, Request $request, Model $currentUser,
-                                                 &$errorMessages, $relation = '', $relationship = [],
-                                                 $relationValues = [], &$managedRelationIds = [], &$relationsToLoad = []
-    )
+    protected function recursivelyManageRelation(BaseModelInterface &$object, Model $currentUser, &$errorMessages,
+                                                 $relation = '', $relationship = [], $relationValues = [],
+                                                 &$managedRelationIds = [], &$relationsToLoad = [])
     {
         $edit = false;
         $checkCompletion = false;
@@ -457,19 +447,10 @@ class BaseModelController extends BaseController
         $relatedObject = null;
         $relationModel = $relationship['model'];
 
-        // make a temporary request for the relation's validation
-        $tmpRequest = new Request();
-        $tmpRequest->setMethod($request->getMethod());
-        if (!empty($relationValues)) {
-            $tmpRequest->merge($relationValues);
-        }
-        $tmpRequest->setUserResolver($request->getUserResolver());
-
         if (isset($relationValues['id'])) {
             $relatedObject = $object->getRelatedObject($relation, $relationValues['id'], $assign);
-            unset($relationValues['id']);
 
-            if ($object::isEditableRelationship($object, $relation, $relatedObject, $tmpRequest)) {
+            if ($object::isEditableRelationship($object, $relation, $relatedObject, $relationValues)) {
                 $edit = true;
             }
         }
@@ -480,7 +461,7 @@ class BaseModelController extends BaseController
              */
             $relatedObject = new $relationModel([], $currentUser);
 
-            if ($object::isEditableRelationship($object, $relation, $relatedObject, $tmpRequest)) {
+            if ($object::isEditableRelationship($object, $relation, $relatedObject, $relationValues)) {
                 $edit = true;
                 $checkCompletion = true;
                 $assign = true;
@@ -494,11 +475,11 @@ class BaseModelController extends BaseController
          * (if model does not define 'editable' => false for the relationship)
          */
         if ($edit && !empty($relationValues)) {
-            $tmpRequest->merge([$relationship['inverse'] => ['id' => $object->id]]);
+            $relationValues[$relationship['inverse']] = ['id' => $object->id];
 
             $this->editObjectContents(
                 $relatedObject,
-                $tmpRequest,
+                $relationValues,
                 $checkCompletion,
                 false,
                 $relationsToLoad
@@ -556,9 +537,9 @@ class BaseModelController extends BaseController
                         if ($relatedObject->hasRelationship($relationship['inverse'])) {
                             $pivotAttributes = [];
                             if (isset($relationship['pivotable']) && $relationship['pivotable']
-                                && $tmpRequest->exists('pivot')
+                                && isset($relationValues['pivot'])
                             ) {
-                                $pivotAttributes = $tmpRequest->input('pivot');
+                                $pivotAttributes = $relationValues['pivot'];
                             }
 
                             // add the new $relatedObject only once (no duplicated associations)
@@ -583,16 +564,15 @@ class BaseModelController extends BaseController
      * Fill object's attributes (fillable and guarded) with request parameters
      *
      * @param BaseModelInterface $object
-     * @param Request $request
+     * @param array $requestParams
      * @param array $validationRules
      */
-    protected function setObjectAttributes(BaseModelInterface &$object, Request $request, $validationRules = [])
+    protected function setObjectAttributes(BaseModelInterface &$object, $requestParams = [], $validationRules = [])
     {
         $activeValidRules = [];
-        $postParams = $request->all();
 
         if (!empty($validationRules)) {
-            foreach ($postParams as $key => $value) {
+            foreach ($requestParams as $key => $value) {
                 if ($object->$key != $value) {
                     if (isset($validationRules[$key])) {
                         $activeValidRules[$key] = $validationRules[$key];
@@ -600,13 +580,20 @@ class BaseModelController extends BaseController
                 }
             }
 
-            $this->validate($request, $activeValidRules);
+            // make a temporary request with only the current $requestParams
+            $tmpRequest = new Request();
+            $tmpRequest->setMethod(request()->getMethod());
+            $tmpRequest->merge($requestParams);
+            $tmpRequest->setUserResolver(request()->getUserResolver());
+
+            // validate only the params with the rules
+            $this->validate($tmpRequest, $activeValidRules);
         }
 
         // update all modifiable attributes with sent parameter values
         $attributes = $object->getAllAttributes();
 
-        foreach ($postParams as $key => $value) {
+        foreach ($requestParams as $key => $value) {
             if (in_array($key, $attributes) && $value != $object->$key) {
                 // explicitly set changed attributes
                 $object->$key = $value;
