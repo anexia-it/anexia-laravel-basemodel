@@ -1091,6 +1091,11 @@ LIKE '%test%' OR type LIKE '%test%' OR name LIKE '%foo%' OR type LIKE '%foo%') A
 'bar%').
 
 
+## Testing
+The package comes with a basic test class for BaseModels. It includes tests for all models' defined deafult values for 
+properties or attributes and if their relation definitions are complete (corresponding definition in related models). 
+
+
 ## List of developers
 
 * Alexandra Bruckner <ABruckner@anexia-it.com>, Lead developer
