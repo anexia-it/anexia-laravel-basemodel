@@ -20,9 +20,8 @@ interface BaseModelInterface
     /**
      * BaseModel constructor.
      * @param array $attributes
-     * @param Model|null $currentUser
      */
-    public function __construct(array $attributes = [], Model $currentUser = null);
+    public function __construct(array $attributes = []);
 
     /**
      * Can be overwritten to support different auth
@@ -37,10 +36,9 @@ interface BaseModelInterface
     public function getUnmodifieable();
 
     /**
-     * @param Model|null $currentUser
      * @return array
      */
-    public static function getDefaults(Model $currentUser = null);
+    public static function getDefaults();
 
     /**
      * @return array

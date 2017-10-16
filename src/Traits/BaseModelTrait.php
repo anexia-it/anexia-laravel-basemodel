@@ -24,17 +24,12 @@ trait BaseModelTrait
     /**
      * BaseModel constructor.
      * @param array $attributes
-     * @param Model|null $currentUser
      */
-    public function __construct(array $attributes = [], Model $currentUser = null)
+    public function __construct(array $attributes = [])
     {
         parent::__construct($attributes);
 
-        if (!$currentUser instanceof Model) {
-            $currentUser = self::getCurrentAuthUser();
-        }
-
-        $defaults = $this::getDefaults($currentUser);
+        $defaults = $this::getDefaults();
         foreach ($defaults as $key => $value) {
             if (!isset($attributes[$key]) || empty($attributes[$key])) {
                 $this->$key = $value;
@@ -76,10 +71,9 @@ trait BaseModelTrait
     }
 
     /**
-     * @param Model|null $currentUser
      * @return array
      */
-    public static function getDefaults(Model $currentUser = null)
+    public static function getDefaults()
     {
         // return attributes' default values in each model
         return [];

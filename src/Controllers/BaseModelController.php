@@ -55,8 +55,6 @@ class BaseModelController extends BaseController
     protected function editObjectContents(BaseModelInterface &$object, $requestParams = [], $checkCompletion = true,
                                           $manageTransaction = true, &$relationsToLoad = [])
     {
-        /** @var Model $curUser */
-        $curUser = request()->user();
         /** @var array $errorMessages */
         $errorMessages = [];
 
@@ -219,8 +217,6 @@ class BaseModelController extends BaseController
                                              &$relationsToLoad
     )
     {
-        /** @var Model $curUser */
-        $curUser = request()->user();
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
 
@@ -259,7 +255,6 @@ class BaseModelController extends BaseController
                 $relationsToLoad[$relation] = [];
                 $this->recursivelyManageRelation(
                     $object,
-                    $curUser,
                     $errorMessages,
                     $relation,
                     $relationships['one'][$relation],
@@ -427,7 +422,6 @@ class BaseModelController extends BaseController
      * Recursively add and edit a new/existing object to a relations according to submitted request data
      *
      * @param BaseModelInterface $object
-     * @param Model $currentUser
      * @param $errorMessages
      * @param string $relation
      * @param array $relationship
@@ -435,9 +429,9 @@ class BaseModelController extends BaseController
      * @param array $managedRelationIds
      * @param array $relationsToLoad
      */
-    protected function recursivelyManageRelation(BaseModelInterface &$object, Model $currentUser, &$errorMessages,
-                                                 $relation = '', $relationship = [], $relationValues = [],
-                                                 &$managedRelationIds = [], &$relationsToLoad = [])
+    protected function recursivelyManageRelation(BaseModelInterface &$object, &$errorMessages, $relation = '',
+                                                 $relationship = [], $relationValues = [], &$managedRelationIds = [],
+                                                 &$relationsToLoad = [])
     {
         $edit = false;
         $checkCompletion = false;
@@ -459,7 +453,7 @@ class BaseModelController extends BaseController
             /**
              * create a new relationObject of class $relationModel
              */
-            $relatedObject = new $relationModel([], $currentUser);
+            $relatedObject = new $relationModel([]);
 
             if ($object::isEditableRelationship($object, $relation, $relatedObject, $relationValues)) {
                 $edit = true;
