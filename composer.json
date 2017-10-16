@@ -5,7 +5,8 @@
     "license": "MIT",
     "autoload": {
         "psr-4": {
-            "Anexia\\BaseModel\\": "src"
+            "Anexia\\BaseModel\\": "src",
+            "Anexia\\BaseModel\\Tests\\": "tests"
         }
     }
 }
