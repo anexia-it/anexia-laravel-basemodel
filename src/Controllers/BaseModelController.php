@@ -341,7 +341,6 @@ class BaseModelController extends BaseController
                 } else {
                     $this->recursivelyManageRelation(
                         $object,
-                        $curUser,
                         $errorMessages,
                         $relation,
                         $relationships['one'][$relation],
@@ -378,7 +377,6 @@ class BaseModelController extends BaseController
                         // only one to many values set given
                         $this->recursivelyManageRelation(
                             $object,
-                            $curUser,
                             $errorMessages,
                             $relation,
                             $relationships['many'][$relation],
@@ -391,7 +389,6 @@ class BaseModelController extends BaseController
                         foreach ($values as $singleRelationValues) {
                             $this->recursivelyManageRelation(
                                 $object,
-                                $curUser,
                                 $errorMessages,
                                 $relation,
                                 $relationships['many'][$relation],

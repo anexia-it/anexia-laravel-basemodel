@@ -10,10 +10,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Lang;
 
 trait BaseModelTrait
@@ -316,7 +316,7 @@ trait BaseModelTrait
     }
 
     /**
-     * Get all models (filtered, sorted, paginated, with their included relation objects) from the database.
+     * Get all model objects (filtered, sorted, paginated, with their included relation objects) from the database.
      *
      * @param array $columns
      * @param array|mixed $preSetFilters
@@ -371,21 +371,26 @@ trait BaseModelTrait
         /**
          * filtering
          */
-        // add filters
-        // (->where('field', 'attribute'))
-        self::addFilters($query, $filters);
+        $query->where(function (Builder $q) use ($filters, $orFilters) {
+            // add filters
+            // (->where('field', 'attribute'))
+            self::addFilters($q, $filters);
 
-        // add OR filters
-        // (->orWhere('field', 'attribute1')->orWhere('field', 'attribute2'))
-        self::addOrFilters($query, $orFilters);
+            // add OR filters
+            // (->orWhere('field', 'attribute1')->orWhere('field', 'attribute2'))
 
-        // add ILIKE filters
-        // (->where('field', 'ILIKE', '%attribute%'))
-        self::addSearches($query, $searches);
+            self::addOrFilters($q, $orFilters);
+        });
 
-        // add OR ILIKE filters
-        // (->orWhere('field', 'ILIKE', '%attribute1%')->orWhere('field', 'ILIKE', '%attribute2%'))
-        self::addOrSearches($query, $orSearches);
+        $query->where(function (Builder $q) use ($searches, $orSearches) {
+            // add LIKE filters
+            // (->where('field', 'LIKE', '%attribute%'))
+            self::addSearches($q, $searches);
+
+            // add OR LIKE filters
+            // (->orWhere('field', 'LIKE', '%attribute1%')->orWhere('field', 'LIKE', '%attribute2%'))
+            self::addOrSearches($q, $orSearches);
+        });
 
         /**
          * sorting
@@ -497,7 +502,7 @@ trait BaseModelTrait
             /**
              * set search filters
              */
-            // ILIKE '%value%'
+            // LIKE '%value%'
             if (isset($params['search'])) {
                 $searchFields = $instance::getDefaultSearch();
                 if (is_array($params['search'])) {
@@ -521,18 +526,18 @@ trait BaseModelTrait
                     }
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $orSearches[$searchField][] = '%' . $values . '%';
+                            $searches[$searchField][] = '%' . $values . '%';
                         }
                     }
                 } else {
                     foreach ($searchFields as $searchField) {
-                        $orSearches[$searchField] = '%' . $params['search'] . '%';
+                        $searches[$searchField] = '%' . $params['search'] . '%';
                     }
                 }
 
                 unset($params['search']);
             }
-            // ILIKE 'value%'
+            // LIKE 'value%'
             if (isset($params['search_start'])) {
                 $searchFields = $instance::getDefaultSearch();
                 if (is_array($params['search_start'])) {
@@ -556,18 +561,18 @@ trait BaseModelTrait
                     }
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $orSearches[$searchField][] = $values . '%';
+                            $searches[$searchField][] = $values . '%';
                         }
                     }
                 } else {
                     foreach ($searchFields as $searchField) {
-                        $orSearches[$searchField] = $params['search_start'] . '%';
+                        $searches[$searchField] = $params['search_start'] . '%';
                     }
                 }
 
                 unset($params['search_start']);
             }
-            // ILIKE '%value'
+            // LIKE '%value'
             if (isset($params['search_end'])) {
                 $searchFields = $instance::getDefaultSearch();
                 if (is_array($params['search_end'])) {
@@ -591,12 +596,12 @@ trait BaseModelTrait
                     }
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $orSearches[$searchField][] = '%' . $values;
+                            $searches[$searchField][] = '%' . $values;
                         }
                     }
                 } else {
                     foreach ($searchFields as $searchField) {
-                        $orSearches[$searchField] = '%' . $params['search_end'];
+                        $searches[$searchField] = '%' . $params['search_end'];
                     }
                 }
 
@@ -626,32 +631,34 @@ trait BaseModelTrait
     public static function addFilters(Builder &$query, $filters = [])
     {
         if (!empty($filters)) {
-            foreach ($filters as $attribute => $value) {
-                if (is_int($attribute)) {
-                    $query->where(function (Builder $q) use ($value) {
-                        self::addOrFilters($q, $value);
-                    });
-                } else {
-                    $scopes = explode('.', $attribute);
-
-                    if (count($scopes) > 1) {
-                        $relation = $scopes[0];
-                        unset($scopes[0]);
-                        $relAttribute = array_values($scopes);
-                        self::filterRelation($query, $relation, $relAttribute, $value);
+            $query->where(function (Builder $q) use ($filters) {
+                foreach ($filters as $attribute => $value) {
+                    if (is_int($attribute)) {
+                        $q->where(function (Builder $qu) use ($value) {
+                            self::addOrFilters($qu, $value);
+                        });
                     } else {
-                        if (is_array($value)) {
-                            $query->where(function ($q) use ($attribute, $value) {
-                                foreach ($value as $val) {
-                                    $q->orWhere($attribute, $val);
-                                }
-                            });
+                        $scopes = explode('.', $attribute);
+
+                        if (count($scopes) > 1) {
+                            $relation = $scopes[0];
+                            unset($scopes[0]);
+                            $relAttribute = array_values($scopes);
+                            self::filterRelation($q, $relation, $relAttribute, $value);
                         } else {
-                            $query->where($attribute, $value);
+                            if (is_array($value)) {
+                                $q->where(function (Builder $qu) use ($attribute, $value) {
+                                    foreach ($value as $val) {
+                                        $qu->orWhere($attribute, $val);
+                                    }
+                                });
+                            } else {
+                                $q->where($attribute, $value);
+                            }
                         }
                     }
                 }
-            }
+            });
         }
     }
 
@@ -682,7 +689,7 @@ trait BaseModelTrait
                             self::orFilterRelation($q, $relation, $scopes, $values);
                         } else {
                             if (is_array($values)) {
-                                $q->orWhere(function ($qu) use ($attribute, $values) {
+                                $q->orWhere(function (Builder $qu) use ($attribute, $values) {
                                     foreach ($values as $value) {
                                         $qu->orWhere($attribute, $value);
                                     }
@@ -698,9 +705,9 @@ trait BaseModelTrait
     }
 
     /**
-     * add WHERE ILIKE conditions to a query
+     * add WHERE LIKE conditions to a query
      * to only return results that are (case insensitive) like certain filter criteria
-     * (->where('field', 'ILIKE', '%attribute%'))
+     * (->where('field', 'LIKE', '%attribute%'))
      *
      * @param Builder $query
      * @param array $searches
@@ -708,33 +715,55 @@ trait BaseModelTrait
     public static function addSearches(Builder &$query, $searches = [])
     {
         if (!empty($searches)) {
-            foreach ($searches as $attribute => $value) {
-                $scopes = explode('.', $attribute);
+            $query->where(function (Builder $q) use ($searches) {
+                foreach ($searches as $attribute => $value) {
+                    $scopes = explode('.', $attribute);
 
-                if (count($scopes) > 1) {
-                    $relation = $scopes[0];
-                    unset($scopes[0]);
-                    $scopes = array_values($scopes);
-                    self::searchRelation($query, $relation, $scopes, $value);
-                } else {
-                    if (is_array($value)) {
-                        $query->where(function ($q) use ($attribute, $value) {
-                            foreach ($value as $val) {
-                                $q->orWhere($attribute, 'ILIKE', $val);
-                            }
-                        });
+                    if (count($scopes) > 1) {
+                        $relation = $scopes[0];
+                        unset($scopes[0]);
+                        $scopes = array_values($scopes);
+                        self::searchRelation($q, $relation, $scopes, $value);
                     } else {
-                        $query->where($attribute, 'ILIKE', $value);
+                        if (is_array($value)) {
+                            $q->where(function (Builder $qu) use ($attribute, $value) {
+                                $connection = $qu->getConnection();
+
+                                switch (get_class($connection)) {
+                                    case \Illuminate\Database\PostgresConnection::class:
+                                        foreach ($value as $val) {
+                                            $qu->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $val);
+                                        }
+                                        break;
+                                    default:
+                                        foreach ($value as $val) {
+                                            $qu->orWhere($attribute, 'LIKE', $val);
+                                        }
+                                        break;
+                                }
+                            });
+                        } else {
+                            $connection = $q->getConnection();
+
+                            switch (get_class($connection)) {
+                                case \Illuminate\Database\PostgresConnection::class:
+                                    $q->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                    break;
+                                default:
+                                    $q->where($attribute, 'LIKE', $value);
+                                    break;
+                            }
+                        }
                     }
                 }
-            }
+            });
         }
     }
 
     /**
-     * add WHERE ILIKE OR ILIKE conditions to a query
-     * to only return restults that are (case insensitive) like one of many filter criteria
-     * (->orWhere('field', 'ILIKE', '%attribute1%')->orWhere('field', 'ILIKE', '%attribute2%'))
+     * add WHERE LIKE OR LIKE conditions to a query
+     * to only return results that are (case insensitive) like one of many filter criteria
+     * (->orWhere('field', 'LIKE', '%attribute1%')->orWhere('field', 'LIKE', '%attribute2%'))
      *
      * @param Builder $query
      * @param array $orSearches
@@ -742,7 +771,7 @@ trait BaseModelTrait
     public static function addOrSearches(Builder &$query, $orSearches = [])
     {
         if (!empty($orSearches)) {
-            $query->where(function ($q) use ($orSearches) {
+            $query->orWhere(function (Builder $q) use ($orSearches) {
                 foreach ($orSearches as $attribute => $values) {
                     $scopes = explode('.', $attribute);
 
@@ -753,13 +782,33 @@ trait BaseModelTrait
                         self::orSearchRelation($q, $relation, $scopes, $values);
                     } else {
                         if (is_array($values)) {
-                            $q->orWhere(function ($qu) use ($attribute, $values) {
-                                foreach ($values as $value) {
-                                    $qu->orWhere($attribute, 'ILIKE', $value);
+                            $q->where(function (Builder $qu) use ($attribute, $values) {
+                                $connection = $qu->getConnection();
+
+                                switch (get_class($connection)) {
+                                    case \Illuminate\Database\PostgresConnection::class:
+                                        foreach ($values as $value) {
+                                            $qu->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                        }
+                                        break;
+                                    default:
+                                        foreach ($values as $value) {
+                                            $qu->where($attribute, 'LIKE', $value);
+                                        }
+                                        break;
                                 }
                             });
                         } else {
-                            $q->orWhere($attribute, 'ILIKE', $values);
+                            $connection = $q->getConnection();
+
+                            switch (get_class($connection)) {
+                                case \Illuminate\Database\PostgresConnection::class:
+                                    $q->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $values);
+                                    break;
+                                default:
+                                    $q->orWhere($attribute, 'LIKE', $values);
+                                    break;
+                            }
                         }
                     }
                 }
@@ -810,7 +859,7 @@ trait BaseModelTrait
     private static function filterRelation(Builder &$query, $relation = '', $attribute = [], $value = '')
     {
         // get entity that has relation with certain attribute value
-        $query->whereHas($relation, function ($q) use ($attribute, $value) {
+        $query->whereHas($relation, function (Builder $q) use ($attribute, $value) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
@@ -818,9 +867,9 @@ trait BaseModelTrait
                 self::filterRelation($q, $relation, $attribute, $value);
             } else {
                 if (is_array($value)) {
-                    $q->where(function ($query) use ($attribute, $value) {
+                    $q->where(function (Builder $qu) use ($attribute, $value) {
                         foreach ($value as $val) {
-                            $query->orWhere($attribute[0], $val);
+                            $qu->orWhere($attribute[0], $val);
                         }
                     });
                 } else {
@@ -839,7 +888,7 @@ trait BaseModelTrait
     private static function orFilterRelation(Builder &$query, $relation = '', $attribute = [], $values = [])
     {
         // get entity that has relation with certain attribute value
-        $query->orWhereHas($relation, function ($q) use ($relation, $attribute, $values) {
+        $query->orWhereHas($relation, function (Builder $q) use ($relation, $attribute, $values) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
@@ -847,9 +896,9 @@ trait BaseModelTrait
                 self::filterRelation($q, $relation, $attributes, $values);
             } else {
                 if (is_array($values)) {
-                    $q->where(function ($query) use ($attribute, $values) {
+                    $q->where(function (Builder $qu) use ($attribute, $values) {
                         foreach ($values as $value) {
-                            $query->orWhere($attribute[0], $value);
+                            $qu->orWhere($attribute[0], $value);
                         }
                     });
                 } else {
@@ -867,8 +916,8 @@ trait BaseModelTrait
      */
     private static function searchRelation(Builder &$query, $relation = '', $attribute = [], $value = '')
     {
-        // get entity that has relation with certain attribute ILIKE the value
-        $query->whereHas($relation, function ($q) use ($attribute, $value) {
+        // get entity that has relation with certain attribute LIKE the value
+        $query->whereHas($relation, function (Builder $q) use ($attribute, $value) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
@@ -876,13 +925,33 @@ trait BaseModelTrait
                 self::searchRelation($q, $relation, $attribute, $value);
             } else {
                 if (is_array($value)) {
-                    $q->where(function ($qu) use ($attribute, $value) {
-                        foreach ($value as $val) {
-                            $qu->orWhere($attribute[0], 'ILIKE', $val);
+                    $q->where(function (Builder $qu) use ($attribute, $value) {
+                        $connection = $qu->getConnection();
+
+                        switch (get_class($connection)) {
+                            case \Illuminate\Database\PostgresConnection::class:
+                                foreach ($value as $val) {
+                                    $qu->orWhere(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $val);
+                                }
+                                break;
+                            default:
+                                foreach ($value as $val) {
+                                    $qu->orWhere($attribute[0], 'LIKE', $val);
+                                }
+                                break;
                         }
                     });
                 } else {
-                    $q->where($attribute[0], 'ILIKE', $value);
+                    $connection = $q->getConnection();
+
+                    switch (get_class($connection)) {
+                        case \Illuminate\Database\PostgresConnection::class:
+                            $q->where(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value);
+                            break;
+                        default:
+                            $q->where($attribute[0], 'LIKE', $value);
+                            break;
+                    }
                 }
             }
         });
@@ -896,8 +965,8 @@ trait BaseModelTrait
      */
     private static function orSearchRelation(Builder &$query, $relation = '', $attribute = [], $values = [])
     {
-        // get entity that has relation with certain attribute ILIKE the value
-        $query->orWhereHas($relation, function ($q) use ($attribute, $values) {
+        // get entity that has relation with certain attribute LIKE the value
+        $query->orWhereHas($relation, function (Builder $q) use ($attribute, $values) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
@@ -905,19 +974,42 @@ trait BaseModelTrait
                 self::searchRelation($q, $relation, $attribute, $values);
             } else {
                 if (is_array($values)) {
-                    $q->where(function ($qu) use ($attribute, $values) {
-                        foreach ($values as $value) {
-                            $qu->orWhere($attribute[0], 'ILIKE', $value);
+                    $q->where(function (Builder $qu) use ($attribute, $values) {
+                        $connection = $qu->getConnection();
+
+                        switch (get_class($connection)) {
+                            case \Illuminate\Database\PostgresConnection::class:
+                                foreach ($values as $value) {
+                                    $qu->orWhere(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value);
+                                }
+                                break;
+                            default:
+                                foreach ($values as $value) {
+                                    $qu->orWhere($attribute[0], 'LIKE', $value);
+                                }
+                                break;
                         }
                     });
                 } else {
-                    $q->where($attribute[0], 'ILIKE', $values);
+                    $connection = $q->getConnection();
+
+                    switch (get_class($connection)) {
+                        case \Illuminate\Database\PostgresConnection::class:
+                            $q->where(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $values);
+                            break;
+                        default:
+                            $q->where($attribute[0], 'LIKE', $values);
+                            break;
+                    }
                 }
             }
         });
     }
 
     /**
+     * Get a single model object from the database, if it matches the $id and possibly given $preSetFilters (possibly
+     * including some/all object's relations)
+     *
      * @param int $id
      * @param array $columns
      * @param array $preSetFilters
@@ -933,27 +1025,19 @@ trait BaseModelTrait
         /** @var Model $modelClass */
         $modelClass = get_called_class();
 
-        $getParams = [];
-        parse_str($request->getQueryString(), $getParams);
-        if (!empty($getParams)) {
-            if (array_key_exists('include', $getParams)) {
-                $includes = array_merge($includes, $getParams['include']);
-                $includes = array_unique($includes);
-                unset($getParams['include']);
-            }
-
-            /** @var Model $instance */
-            $instance = new $modelClass;
-            $fillables = $instance->getFillable();
-            $guarded = $instance->getGuarded();
-            $attributes = array_merge($fillables, $guarded);
-
-            foreach ($attributes as $attribute) {
-                if ($value = $request->input($attribute)) {
-                    $filters[$attribute] = $value;
-                }
-            }
-        }
+        $getParams = $request->query();
+        self::extractFromParams(
+            $getParams,
+            $modelClass,
+            $page,
+            $pagination,
+            $includes,
+            $sortings,
+            $filters,
+            $orFilters,
+            $searches,
+            $orSearches
+        );
 
         // include relations over multiple levels (->load('relation'))
         $formattedIncludes = [];
@@ -965,20 +1049,16 @@ trait BaseModelTrait
 
         // only return results that match certain filter criteria (->where('field', 'attribute'))
         try {
+            /**
+             * filtering
+             */
             if (!empty($filters)) {
                 $query = $modelClass::query()->where('id', $id);
-                foreach ($filters as $attribute => $value) {
-                    $scopes = explode('.', $attribute);
 
-                    if (count($scopes) > 1) {
-                        $relation = $scopes[0];
-                        unset($scopes[0]);
-                        $scopes = array_values($scopes);
-                        self::filterRelation($query, $relation, $scopes, $value);
-                    } else {
-                        $query->where($attribute, $value);
-                    }
-                }
+                // add filters
+                // (->where('field', 'attribute'))
+                self::addFilters($query, $filters);
+
                 /** @var Model $entity */
                 $entity = $query->with($formattedIncludes)->firstOrFail($columns);
             } else {
