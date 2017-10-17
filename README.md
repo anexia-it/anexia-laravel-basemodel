@@ -275,7 +275,7 @@ All custom checks and validations regarding a model's properties (and related ob
 the 'validateAttributeLogic' and appropriate exceptions can be thrown on validation failures. All possibly thrown 
 exceptions will be caught within the 'editObjectContents' method and be transferred into a BulkValidationException.
 
-See section [Exceptions](#-exceptions) for more details on the package's exception handling.
+See section [Exceptions](#44-exceptions) for more details on the package's exception handling.
 
 
 ## 4. Available Features
@@ -465,7 +465,7 @@ This method adds BaseModel features to the basic 'all' method of each eloquent m
 ```
 
 While all of those features can be configured via GET request parameters - see section 
-[HTTP List request options and parameters](#4.5.-http-list-request-options-and-parameters) for further detail on the
+[HTTP List request options and parameters](#45-http-list-request-options-and-parameters) for further detail on the
 possible parameter configurations during a request - some of them can also be prefilled when calling the 'allExtended'
 method in a class (e.g. a REST controller).
 The method definition from the BaseModelInterface looks like this:
@@ -760,7 +760,7 @@ This method adds BaseModel features to the basic 'find' method of each eloquent 
 ```
 
 While all of those features can be configured via GET request parameters - see section 
-[HTTP List request options and parameters](#4.5.-http-list-request-options-and-parameters) for further detail on the
+[HTTP List request options and parameters](#45-http-list-request-options-and-parameters) for further detail on the
 possible parameter configurations during a request - some of them can also be prefilled when calling the 'findExtended'
 method in a class (e.g. a REST controller).
 The method definition from the BaseModelInterface looks like this:
