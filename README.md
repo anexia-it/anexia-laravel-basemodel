@@ -17,6 +17,7 @@ composer update [-o]
 ```
 to add the packages source code to your ``/vendor`` directory and update the autoloading.
 
+
 ## Usage
 
 ### Models
@@ -80,6 +81,7 @@ data on multiple related models at once.
 * The nested transactions are currently only available for PostgreSQL connections
 (via Anexia\BaseModel\Database\PostgresConnection). To support other databases, new Connection classes must be provided,
 that extend the Anexia\BaseModel\Database\Connection to handle mutliple open transactions.
+
 
 ## Model Configuration Methods
 The BaseModelInterface demands several internal configurations for each model, most of them can be empty by default (as
@@ -274,6 +276,7 @@ the 'validateAttributeLogic' and appropriate exceptions can be thrown on validat
 exceptions will be caught within the 'editObjectContents' method and be transferred into a BulkValidationException.
 
 See section [Exceptions](#exceptions) for more details on the package's exception handling.
+
 
 ## Available Features
 The BaseModelTrait provides several handy methods to support your models and controller actions. Once the models are
@@ -1092,13 +1095,125 @@ LIKE '%test%' OR type LIKE '%test%' OR name LIKE '%foo%' OR type LIKE '%foo%') A
 
 
 ## Testing
-The package comes with a basic test class for BaseModels. It includes tests for all models' defined deafult values for 
-properties or attributes and if their relation definitions are complete (corresponding definition in related models). 
+The package comes with a basic test class for BaseModels and a more general DbTestCase that uses DatabaseTransactions
+to keep changes to the test db temporary (changes are undone after each test method). 
+
+### Model Tests (Unit Tests)
+The BaseModelTestCase includes tests for all models' defined default values for properties/attributes and a check
+whether their relation definitions are complete (corresponding definition in related models). 
+
+To use the two provided tests for a BaseModel, the BaseModelTestCase class can be extended (abstract methods need to be
+implemented). Afterwards the two tests 'testInverseRelationsForBulkActions' and 'testDefaultValues' will be available
+for the newly created test class:
+
+```
+<?php
+
+namespace Tests\Unit\Models;
+
+use Anexia\BaseModel\Tests\Unit\Models\BaseModelTestCase;
+use App\User;
+
+class PostTest extends BaseModelTestCase
+{
+    /**
+     * @param int $userId
+     */
+    protected function mockLogin($userId = 1)
+    {
+        // mock the user of request()->user()
+        $this->be($this->getUser($userId));
+        $this->call('GET', 'login');
+    }
+
+    /**
+     * @param int $id
+     * @return User|null
+     */
+    public function getUser($id = 1)
+    {
+        return User::find($id);
+    }
+}
+```
+By running the phpunit tests, the tests from BaseModelTestCase will be executed for the Post model.
+```
+phpunit [--filter PostTest]
+```
+
+### Controller Tests (Feature Tests)
+The RestControllerTestCase provides a check method for the pagination as described in section [Pagination](#pagination).
+This check makes sure, all pagination related fields are set in the list response.
+
+To use this method the RestControllerTestCase can be extended (abstract methods need to be implemented) and after a
+(mocked) GET list request, the pagination check can be included:
+
+```
+<?php
+
+namespace Tests\Feature\Controllers;
+
+use Anexia\BaseModel\Tests\Feature\Controllers\RestControllerTestCase
+use App\Post;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Lang;
+
+class PostControllerTest extends RestControllerTestCase
+{
+    /** string */
+    const API_ROUTE = '/api/v1';
+
+    /**
+     * Test read list
+     *
+     * @return void
+     */
+    public function testReadPostList()
+    {
+        $response = $this->get(self::API_ROUTE . '/posts');
+
+        $response->assertStatus(200);
+        $body = json_decode($response->getContent(), true);
+
+        $this->assertArrayHasKey('data', $body);
+        $data = $body['data'];
+        $this->assertInternalType('array', $data);
+        
+        $includes = [
+            // OR connected conditions
+
+            [
+                // AND connected conditions
+
+                'therapist_id' => null,
+                'unit_id' => null
+            ],
+            'therapist_id' => $this->currentUser->id,
+            'unit.therapy.therapist_id' => $this->currentUser->id
+        ];
+
+        $posts = Post::allExtended(
+            ['*'],
+            [],
+            $includes
+        );
+
+        // add pagination checks
+        $this->runPaginationTests($body, $posts->count());
+    }
+}
+```
+
+### DbTestCase
+Both, BaseModelTestCase and RestControllerTestCase use the DbTestCase, which allows DatabaseTransactions. By default,
+all tests use the database connection defined as 'pgsql_testing'. At the first test in each run the database gets
+created from scratch (using the commands 'php artisan migrate' and 'php artisan db:seed').
 
 
 ## List of developers
 
 * Alexandra Bruckner <ABruckner@anexia-it.com>, Lead developer
+
 
 ## Project related external resources
 

@@ -20,7 +20,7 @@ abstract class DbTestCase extends BaseTestCase
     {
         putenv('DB_CONNECTION=pgsql_testing');
 
-        $app = require __DIR__.'/../bootstrap/app.php';
+        $app = require __DIR__.'/../../../../bootstrap/app.php';
 
         $app->make(Kernel::class)->bootstrap();
         $callResult = null;

@@ -3,13 +3,9 @@
 namespace Anexia\BaseModel\Tests\Unit\Models;
 
 use Anexia\BaseModel\Interfaces\BaseModelInterface;
-use Anexia\BaseModel\Interfaces\ExtendedModelInterface;
-use App\BaseModel;
-use App\User;
-use Illuminate\Container\Container;
+use Anexia\BaseModel\Tests\DbTestCase;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Pivot;
-use Illuminate\Support\Facades\Facade;
-use Tests\DbTestCase;
 
 abstract class BaseModelTestCase extends DbTestCase
 {
@@ -33,18 +29,18 @@ abstract class BaseModelTestCase extends DbTestCase
 
     /**
      * @param int $userId
-     * @return mixed|null
+     * @return Model|bool|null
      *
      * e.g.:
      * protected function mockLogin($userId = 1)
      * {
      *     // mock the user of request()->user()
-     *     $this->be(User::find($userId));
+     *     $this->be($this->getUser($userId));
      *     $this->call('GET', 'login');
      * }
      *
      */
-    abstract protected function mockLogin($userId = 1);
+    abstract protected function mockLogin($userId);
 
     /**
      * @param int $id
@@ -57,12 +53,12 @@ abstract class BaseModelTestCase extends DbTestCase
      * }
      *
      */
-    abstract public function getUser($id = 1);
+    abstract public function getUser($id);
 
     /**
      * Make sure each related model has an inverse relation to $this->modelClass
      */
-    public function testRelationInverse()
+    public function testInverseRelationsForBulkActions()
     {
         /** @var array $relations */
         $relations = $this->model->getRelationships();
