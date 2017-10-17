@@ -18,10 +18,7 @@ class BaseModelServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-        // add additional config files
-        $this->publishes([
-            __DIR__ . '/../../config/basemodel.php' => $this->app['path.config'] . DIRECTORY_SEPARATOR . 'basemodel.php',
-        ], 'anexia-basemodel');
+        // nothing happening here
     }
 
     /**
