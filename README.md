@@ -2,7 +2,7 @@
 
 A Laravel package used to provide extended basic functionality (filtering, sorting, pagination) to eloquent models.
 
-## 1. Installation and configuration
+## 1.Installation and configuration
 
 Install the module via composer, therefore adapt the ``require`` part of your ``composer.json``:
 ```
@@ -18,9 +18,9 @@ composer update [-o]
 to add the packages source code to your ``/vendor`` directory and update the autoloading.
 
 
-## 2. Usage
+## 2.Usage
 
-### 2.1. Models
+### 2.1.Models
 Use the BaseModelInterface in combination with the BaseModelTrait in all models that are supposed to support the
 base functionality (filtering, sorting, pagination, ...).
 ```
@@ -69,7 +69,7 @@ class User extends Model implements BaseModelInterface,
 }
 ```
 
-### 2.2. Controllers
+### 2.2.Controllers
 Use the BaseModelController to allow 'bulk actions' (create, update, delete) over multiple layers of object relations.
 It comes with the method 'editObjectContents' which expects a BaseModel (implementing the BaseModelInterface and using
 the BaseModelTrait) and the new properties (as array, as provided by a POST/PUT/PATCH request).
@@ -83,24 +83,24 @@ data on multiple related models at once.
 that extend the Anexia\BaseModel\Database\Connection to handle mutliple open transactions.
 
 
-## 3. Model Configuration Methods
+## 3.Model Configuration Methods
 The BaseModelInterface demands several internal configurations for each model, most of them can be empty by default (as
 many in the BaseModelTrait). But if need be, specific alterations of those configuration methods can make any model very
 self-sufficient in regards of validation, change behaviour and other aspects. 
 
-### 3.1. getUnmodifieable
+### 3.1.getUnmodifieable
 expected result: array of unmodifieable properties
 
 All properties returned by this function will be excluded from the BaseModelController's 'editObjectContents' method.
 Thus, those properties will not be automatically/bulk edited and must be set/changed explicitly.
 
-### 3.2. getDefaults
+### 3.2.getDefaults
 expected result: array of the properties with their default values
 
 If properties get values assigned within this method, the BaseModel constructor will automatically fill them on model
 instantiation (regardless of whether they are defined as $guarded or $fillable). They do not have to be set explicitly.
 
-### 3.3. getDefaultSearch
+### 3.3.getDefaultSearch
 expected result: array of properties that shall be searched by default whenever allExtended is called with 'search'
 parameters. 
 
@@ -111,13 +111,13 @@ SQL condition), the searches will be OR connected.
 
 See section [Searching](#4.5.3.searching) for more details on the search behaviour.
 
-### 3.4. getDefaultSorting
+### 3.4.getDefaultSorting
 expected result: all properties plus the wanted direction that shall be sorted by default whenever allExtended is
 called.
 
 See section [Sorting](#4.5.1.sorting) for more details on the sorting behavior.
 
-### 3.5. getRelationships
+### 3.5.getRelationships
 expected result: all properties that are associated with a related model class.
 possible input: boolean $list parameter
 
@@ -208,7 +208,7 @@ Depending on the configuration of the model's relationships, the BaseModelContro
 iterate through the related objects (and their relations, and their relations, etc.) and make changes (creation or
 update) on them.
 
-### 3.6. getValidationRules
+### 3.6.getValidationRules
 expected result: all laravel validation rules (see https://laravel.com/docs/5.3/validation for details on the supported
 rules) that are associated with a related model class.
 possible input: boolean $checkCompletion parameter
@@ -263,7 +263,7 @@ PATCH /posts/1
 would result in an error with the information, that the fields 'type' and 'author_id' are missing, even if they simply
 should not get changed.
 
-### 3.7. validateAttributeLogic
+### 3.7.validateAttributeLogic
 expected results: void or exceptions (if any part of the custom validation fails)
 
 For more complex/logical checks the laravel HTTP parameter validation might not be sufficient, e.g. when a property
@@ -278,11 +278,11 @@ exceptions will be caught within the 'editObjectContents' method and be transfer
 See section [Exceptions](#4.4.exceptions) for more details on the package's exception handling.
 
 
-## 4. Available Features
+## 4.Available Features
 The BaseModelTrait provides several handy methods to support your models and controller actions. Once the models are
 configured correctly, many basic behaviours will happen automatically or with minimum coding effort.
 
-### 4.1. Model Default values
+### 4.1.Model Default values
 The BaseModelTrait comes with the possibility to prefill default values on an object's instantiation. The 'getDefaults'
 method can be configured to return an array of all default values for a model's properties, e.g.:
 
@@ -317,7 +317,7 @@ class Post extends Model implements BaseModelInterface
 }
 ```
 
-### 4.2. Relationship configurations (Bulk Actions)
+### 4.2.Relationship configurations (Bulk Actions)
 A model can use its relations for 'bulk actions'. These bulk actions allow multiple related models to be managed in a
 single request instead of calling one request per each model action. 
 
@@ -451,11 +451,11 @@ POST /posts
 This request will create a new Post with name 'Post 1' AND two new Comments with the texts: 'A comment from a user' and 
 'Another comment from a user' without the necessity to call two additional POST requests for the two comments.
 
-### 4.3. Extended all and find methods
+### 4.3.Extended all and find methods
 The BaseModelTrait implements the two improved model methods 'allExtended' and 'findExtended'. They are extended
 versions of eloquent models' 'all' and 'find' methods and behave as following:
 
-#### 4.3.1. Static Method allExtended
+#### 4.3.1.Static Method allExtended
 This method adds BaseModel features to the basic 'all' method of each eloquent model:
 ```
 * filter
@@ -494,10 +494,10 @@ AND (
 The following section will describe how the 'allExtended' method's parameters can be used directly on method call,
 regardless of possible HTTP request parameters.
 
-##### 4.3.1.1. Parameters
+##### 4.3.1.1.Parameters
 So as the 'add' method once can specify the following configuration when fetching a bunch of objects:
 
-###### 4.3.1.1.1 $columns (first parameter)
+###### 4.3.1.1.1$columns (first parameter)
 Plain array that defines the columns (= model's properties), that are to be returned for all found objects. The object
 ids will always be returned, regradless of the settings of the 'columns' variable.
 **Example**
@@ -521,7 +521,7 @@ will only return the names (and ids) of all found post entries:
 }
 ```
 
-###### 4.3.1.1.2. $preSetFilters (second parameter)
+###### 4.3.1.1.2.$preSetFilters (second parameter)
 Multiarray of 'WHERE x = y' filtering conditions that get nested like this:
 ```
     $preSetFilters = [
@@ -575,7 +575,7 @@ select * from posts where (
 )
 ```
 
-###### 4.3.1.1.3. $preSetOrFilters (third parameter)
+###### 4.3.1.1.3.$preSetOrFilters (third parameter)
 Multiarray of 'WHERE ... OR x = y' filtering conditions that get nested like this:
 ```
     $preSetFilters = [
@@ -632,7 +632,7 @@ select * from posts where (
 )
 ```
 
-###### 4.3.1.1.4. $preSetIncludes (fourth parameter)
+###### 4.3.1.1.4.$preSetIncludes (fourth parameter)
 Plain array of all model relations (their method's names) that are to be included into the resulting list.
 **Example**
 ```
@@ -688,7 +688,7 @@ will return the wanted relations' properties along with the found post entries:
 }
 ```
 
-###### 4.3.1.1.5. $preSetSearches (fifth parameter)
+###### 4.3.1.1.5.$preSetSearches (fifth parameter)
 Multiarray of 'WHERE X LIKE "y"' filtering conditions that get nested like this:
 ```
     $preSetSearches = [
@@ -720,7 +720,7 @@ select * from posts where (((name::TEXT ILIKE '%post%' or name::TEXT ILIKE 'blog
     and author_id::TEXT ILIKE '%1%'))
 ```
 
-###### 4.3.1.1.6. $preSetOrSearches (sixth parameter)
+###### 4.3.1.1.6.$preSetOrSearches (sixth parameter)
 Multiarray of 'WHERE ... OR X LIKE "y"' filtering conditions that get nested like this:
 ```
     $preSetOrSearches = [
@@ -752,7 +752,7 @@ select * from posts where (((name::TEXT ILIKE '%post%' and name::TEXT ILIKE 'blo
     or author_idvLIKE '%1%'))
 ```
 
-#### 4.3.2. Static method findExtended
+#### 4.3.2.Static method findExtended
 This method adds BaseModel features to the basic 'find' method of each eloquent model:
 ```
 * filter
@@ -777,10 +777,10 @@ SELECT ... WHERE $preSetFilters
 The following section will describe how the 'findExtended' method's parameters can be used directly on method call,
 regardless of possible HTTP request parameters.
 
-##### 4.3.2.1. Parameters
+##### 4.3.2.1.Parameters
 So as the 'add' method once can specify the following configuration when fetching a bunch of objects:
 
-###### 4.3.2.1.1. $columns (second parameter)
+###### 4.3.2.1.1.$columns (second parameter)
 Plain array that defines the columns (= model's properties), that are to be returned for the found object. The object
 id will always be returned, regradless of the settings of the 'columns' variable.
 **Example**
@@ -797,7 +797,7 @@ will only return the name (and id) of the found post entry:
 }
 ```
 
-###### 4.3.2.1.2. $preSetFilters (third parameter)
+###### 4.3.2.1.2.$preSetFilters (third parameter)
 Multiarray of 'WHERE x = y' filtering conditions that get nested like this:
 ```
     $preSetFilters = [
@@ -834,15 +834,15 @@ will result in the following SQL query:
 select * from posts where id = 1 and 
 ```
 
-### 4.4. Exceptions
+### 4.4.Exceptions
 The BaseModel package comes with two built-in exception classes:
 
-#### 4.4.1. SqlException
+#### 4.4.1.SqlException
 When the BaseModelController's 'editObjectContents' method catches a standard QueryException (Illuminate\Database), it
 looks for certain PostgreSQL error codes and translates them into SqlExceptions with default status code 400 and the
 corresponding info text as 'message'. 
 
-#### 4.4.2. BulkValidationException 
+#### 4.4.2.BulkValidationException 
 When the BaseModelController's 'editObjectContents' method catches any exception's whatsoever, it puts their message
 (or messages, if multiple exceptions get thrown in the course of the edition of multiple related objects) into a
 BulkValidationException's 'messages' field. The BulkValidationException defaults to a status code 400 and has both a
@@ -850,9 +850,9 @@ BulkValidationException's 'messages' field. The BulkValidationException defaults
 'getMessages' method) that contains the collected exception's messages with further details to the actual occurring
 errors.
 
-### 4.5. HTTP List request options and parameters
+### 4.5.HTTP List request options and parameters
 
-#### 4.5.1. Sorting
+#### 4.5.1.Sorting
 Each endpoint request that provides lists of multiple entities can be sorted according to the related entities'
 properties.
 
@@ -907,7 +907,7 @@ The following definition
 ```
 results in the post lists to be sorted by names in ascending order and types in descending order.
 
-##### 4.5.1.1. Custom sorting
+##### 4.5.1.1.Custom sorting
 The default sort_field and sort_direction can be modified via GET parameters:
  * sort_field - alters 'orderBy' parameter of internal SQL query
  * sort_direction - alters 'orderBy DESC|ASC' parameter of internal SQL query
@@ -954,7 +954,7 @@ so as conclusion the order of the sorting-results is:
 * all 'sort_field' parameters (order as in URI) with their according 'sort_direction' parameters
 * all remaining (with no corresponding 'sort_field' parameter) 'sort_direction' parameters (order as in URI) 
 
-#### 4.5.2. Filtering
+#### 4.5.2.Filtering
 Each endpoint request that provides lists of multiple entities can be filtered to return only those results that show
 the required values for the given attributes.
 
@@ -962,7 +962,7 @@ the required values for the given attributes.
 
 `GET /posts?author_id=1` will only return the posts of the author with id 1
 
-##### 4.5.2.1. AND Filtering (multiple filters)
+##### 4.5.2.1.AND Filtering (multiple filters)
 Filters usually get added via AND constraint, so multiple filters can be combined in one request.
 
 **Example**
@@ -970,7 +970,7 @@ Filters usually get added via AND constraint, so multiple filters can be combine
 `GET /posts?author.name=Someone&type=SomeType` will only return the posts that have the type = 'SomeType' AND belong to
 the author with name = 'Someone' 
 
-##### 4.5.2.2. OR Filtering (multiple valid values for the same filter)
+##### 4.5.2.2.OR Filtering (multiple valid values for the same filter)
 To allow several possible values for one filter, the OR constraint can be used by making the filter an array.
 
 **Example**
@@ -978,7 +978,7 @@ To allow several possible values for one filter, the OR constraint can be used b
 `GET /posts?name[]=test post&name[]=Another post` will only return the posts that have the name = 'test post' or name =
 'Another post'.
 
-#### 4.5.3. Searching
+#### 4.5.3.Searching
 To trigger a case insensitive 'LIKE' sql search (case insensitive LIKE), the 'search' GET parameter can be used.
 By default the model properties defined in the 'getDefaultSearch' method will be searched if no explicit property name
 is given with the search parameter.
@@ -1020,7 +1020,7 @@ class Post extends Model implements BaseModelInterface
 
 `GET /posts?search[type]=test` will return all posts with type LIKE '%test%'.
 
-##### 4.5.3.1. Search at field start or end
+##### 4.5.3.1.Search at field start or end
 To look for a substring at the beginning of a field, the 'search_start' GET parameter can be used. It can also be used
 on the default search properties or on specific properties:
 
@@ -1038,7 +1038,7 @@ The same applies for the 'search_end' GET parameter that can be used to find sub
 
 `GET /posts?search_end[type]=test` will return all posts with type LIKE '%test'.
 
-##### 4.5.3.2. AND Searching (multiple search conditions)
+##### 4.5.3.2.AND Searching (multiple search conditions)
 Whenever multiple 'search', 'search_start', 'seartch_end' parameters are given in the GET request, they are AND
 connected in the resulting query.
 
@@ -1047,7 +1047,7 @@ connected in the resulting query.
 `GET /posts?search=test&search_end[type]=foo` will return all posts with ((name LIKE '%test%' OR type LIKE '%test%')
 AND type LIKE '%foo').
 
-##### 4.5.3.3. OR Searching (multiple valid values for the same search condition)
+##### 4.5.3.3.OR Searching (multiple valid values for the same search condition)
 To define multiple possible values for the search on the same fields, the values can be arranged as arrays:
 
 **Example**
@@ -1063,7 +1063,7 @@ Multiple AND and OR combinations of search filters can be applied in one GET req
 LIKE '%test%' OR type LIKE '%test%' OR name LIKE '%foo%' OR type LIKE '%foo%') AND type LIKE '%foo' AND name LIKE
 'bar%').
 
-#### 4.5.4. Pagination
+#### 4.5.4.Pagination
 For GET requests on lists of models (e.g. GET /posts), the default pagination is always 10 items per page, starting with
 page 1 (items 0 - 10).
 
@@ -1094,11 +1094,11 @@ LIKE '%test%' OR type LIKE '%test%' OR name LIKE '%foo%' OR type LIKE '%foo%') A
 'bar%').
 
 
-## 5. Testing
+## 5.Testing
 The package comes with a basic test class for BaseModels and a more general DbTestCase that uses DatabaseTransactions
 to keep changes to the test db temporary (changes are undone after each test method). 
 
-### 5.1. Model Tests (Unit Tests)
+### 5.1.Model Tests (Unit Tests)
 The BaseModelTestCase includes tests for all models' defined default values for properties/attributes and a check
 whether their relation definitions are complete (corresponding definition in related models). 
 
@@ -1141,9 +1141,9 @@ By running the phpunit tests, the tests from BaseModelTestCase will be executed 
 phpunit [--filter PostTest]
 ```
 
-### 5.2. Controller Tests (Feature Tests)
+### 5.2.Controller Tests (Feature Tests)
 The RestControllerTestCase provides a check method for the pagination as described in section
-[Pagination](#4.5.4.pagination). This check makes sure, all pagination related fields are set in the list response.
+[Pagination](#pagination). This check makes sure, all pagination related fields are set in the list response.
 
 To use this method the RestControllerTestCase can be extended (abstract methods need to be implemented) and after a
 (mocked) GET list request, the pagination check can be included:
@@ -1204,17 +1204,17 @@ class PostControllerTest extends RestControllerTestCase
 }
 ```
 
-### 5.3. DbTestCase
+### 5.3.DbTestCase
 Both, BaseModelTestCase and RestControllerTestCase use the DbTestCase, which allows DatabaseTransactions. By default,
 all tests use the database connection defined as 'pgsql_testing'. At the first test in each run the database gets
 created from scratch (using the commands 'php artisan migrate' and 'php artisan db:seed').
 
 
-## 6. List of developers
+## 6.List of developers
 
 * Alexandra Bruckner <ABruckner@anexia-it.com>, Lead developer
 
 
-## 7. Project related external resources
+## 7.Project related external resources
 
 * [Laravel 5 documentation](https://laravel.com/docs/5.4/installation)
