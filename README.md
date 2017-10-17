@@ -109,13 +109,13 @@ HTTP request (fetched via request()->all() and handled as $searches and $orSearc
 All properties returned by the getDefaultSearch function will be searched with the given sub string ('WHERE x LIKE "y"'
 SQL condition), the searches will be OR connected.
 
-See section [Searching](#4.5.3.-searching) for more details on the search behaviour.
+See section [Searching](4.5.3.-searching) for more details on the search behaviour.
 
 ### 3.4. getDefaultSorting
 expected result: all properties plus the wanted direction that shall be sorted by default whenever allExtended is
 called.
 
-See section [Sorting](#4.5.1.-sorting) for more details on the sorting behavior.
+See section [Sorting](4.5.1.-sorting) for more details on the sorting behavior.
 
 ### 3.5. getRelationships
 expected result: all properties that are associated with a related model class.
@@ -275,7 +275,7 @@ All custom checks and validations regarding a model's properties (and related ob
 the 'validateAttributeLogic' and appropriate exceptions can be thrown on validation failures. All possibly thrown 
 exceptions will be caught within the 'editObjectContents' method and be transferred into a BulkValidationException.
 
-See section [Exceptions](#4.4.-exceptions) for more details on the package's exception handling.
+See section [Exceptions](4.4.-exceptions) for more details on the package's exception handling.
 
 
 ## 4. Available Features
@@ -465,7 +465,7 @@ This method adds BaseModel features to the basic 'all' method of each eloquent m
 ```
 
 While all of those features can be configured via GET request parameters - see section 
-[HTTP List request options and parameters](#4.5.-http-list-request-options-and-parameters) for further detail on the
+[HTTP List request options and parameters](4.5.-http-list-request-options-and-parameters) for further detail on the
 possible parameter configurations during a request - some of them can also be prefilled when calling the 'allExtended'
 method in a class (e.g. a REST controller).
 The method definition from the BaseModelInterface looks like this:
@@ -760,7 +760,7 @@ This method adds BaseModel features to the basic 'find' method of each eloquent 
 ```
 
 While all of those features can be configured via GET request parameters - see section 
-[HTTP List request options and parameters](#4.5.-http-list-request-options-and-parameters) for further detail on the
+[HTTP List request options and parameters](4.5.-http-list-request-options-and-parameters) for further detail on the
 possible parameter configurations during a request - some of them can also be prefilled when calling the 'findExtended'
 method in a class (e.g. a REST controller).
 The method definition from the BaseModelInterface looks like this:
@@ -1143,7 +1143,7 @@ phpunit [--filter PostTest]
 
 ### 5.2. Controller Tests (Feature Tests)
 The RestControllerTestCase provides a check method for the pagination as described in section
-[Pagination](#4.5.4.-pagination). This check makes sure, all pagination related fields are set in the list response.
+[Pagination](4.5.4.-pagination). This check makes sure, all pagination related fields are set in the list response.
 
 To use this method the RestControllerTestCase can be extended (abstract methods need to be implemented) and after a
 (mocked) GET list request, the pagination check can be included:
