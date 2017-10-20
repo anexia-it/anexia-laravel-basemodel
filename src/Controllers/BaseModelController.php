@@ -50,10 +50,12 @@ class BaseModelController extends BaseController
      * @param bool|true $checkCompletion
      * @param bool|true $manageTransaction
      * @param array $relationsToLoad
+     * @param array $callingParentRelationship
      * @throws BulkValidationException
      */
     protected function editObjectContents(BaseModelInterface &$object, $requestParams = [], $checkCompletion = true,
-                                          $manageTransaction = true, &$relationsToLoad = [])
+                                          $manageTransaction = true, &$relationsToLoad = [],
+                                          $callingParentRelationship = [])
     {
         /** @var array $errorMessages */
         $errorMessages = [];
@@ -89,7 +91,8 @@ class BaseModelController extends BaseController
             /**
              * recursively add/fill/remove all optional (not required) relations
              */
-            $this->manageOptionalRelations($object, $requestParams, $errorMessages, $relationsToLoad);
+            $this->manageOptionalRelations($object, $requestParams, $errorMessages, $relationsToLoad,
+                $callingParentRelationship);
 
             /**
              * check content logic
@@ -280,9 +283,10 @@ class BaseModelController extends BaseController
      * @param array $requestParams
      * @param array $errorMessages
      * @param array $relationsToLoad
+     * @param array $callingParentRelationship
      */
     private function manageOptionalRelations(BaseModelInterface &$object, $requestParams = [], &$errorMessages,
-                                             &$relationsToLoad
+                                             &$relationsToLoad, $callingParentRelationship = []
     )
     {
         /** @var array $relationships - all possible relations of the $object */
@@ -414,7 +418,10 @@ class BaseModelController extends BaseController
                     /**
                      * delete all related objects from the relation that were not part of the request
                      */
-                    if ($object->$relation->count() > 0) {
+                    if ($object->$relation->count() > 0
+                        && (!isset($callingParentRelationship['inverse'])
+                            || $callingParentRelationship['inverse'] != $relation)
+                    ) {
                         /** @var BaseModelInterface $relatedObject */
                         foreach ($object->$relation as $relatedObject) {
                             if (!in_array($relatedObject->id, $managedRelationIds)) {
@@ -485,7 +492,8 @@ class BaseModelController extends BaseController
                 $relationValues,
                 $checkCompletion,
                 false,
-                $relationsToLoad
+                $relationsToLoad,
+                $relationship
             );
         }
 
@@ -546,7 +554,7 @@ class BaseModelController extends BaseController
                             }
 
                             // add the new $relatedObject only once (no duplicated associations)
-                            $object->$relation()->syncWithoutDetaching($relatedObject, $pivotAttributes);
+                            $object->$relation()->sync([$relatedObject->id => $pivotAttributes], false);
 
                             // refresh the $object to make sure all related objects are in $relation Collection
                             $object->refresh();
