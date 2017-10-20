@@ -278,8 +278,6 @@ class BaseModelController extends BaseController
                                              &$relationsToLoad
     )
     {
-        /** @var Model $curUser */
-        $curUser = request()->user();
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
 
@@ -292,6 +290,12 @@ class BaseModelController extends BaseController
             $origLength = strlen($relation);
             $relation = preg_replace('/\_id$/','',$relation);
             if (strlen($relation) !== $origLength) {
+                // if a relation is given as both 'relation' and 'relation_id', ignore the 'relation_id' part
+                if (isset($requestParams[$relation])) {
+                    // stop iteration branch
+                    return ;
+                }
+
                 if ($values > 0) {
                     $values = ['id' => $values];
                 } else {
@@ -460,6 +464,13 @@ class BaseModelController extends BaseController
                 $relatedObject = null;
             }
         }
+
+//        if ($relation == 'endAppConfigNegative' && count($relationValues) > 1) {
+//            var_dump($relatedObject->bricks);
+//            var_dump($relationValues);
+//            var_dump($edit);
+//            die();
+//        }
 
         /**
          * update existing relationObject
