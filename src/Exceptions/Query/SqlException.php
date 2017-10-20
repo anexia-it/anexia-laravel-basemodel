@@ -14,8 +14,8 @@ class SqlException extends Exception
      * @param int $code
      * @param Throwable|null $previous
      */
-    public function __construct($message = '', $code = 400, Throwable $previous = null
-    ) {
+    public function __construct($message = '', $code = 400, Throwable $previous = null)
+    {
         if (empty($message)) {
             $message = Lang::get('extended_model.errors.foreign_key_failure');
         }

@@ -81,7 +81,13 @@ class BaseModelController extends BaseController
             /**
              * recursively add/fill/remove all required relations
              */
-            $this->manageRequiredRelations($object, $requestParams, $errorMessages, $relationsToLoad);
+            $this->manageRequiredRelations(
+                $object,
+                $requestParams,
+                $errorMessages,
+                $relationsToLoad,
+                $callingParentRelationship
+            );
 
             /**
              * save the object (it has an id from here on out, necessary for the optional relations)
@@ -91,8 +97,13 @@ class BaseModelController extends BaseController
             /**
              * recursively add/fill/remove all optional (not required) relations
              */
-            $this->manageOptionalRelations($object, $requestParams, $errorMessages, $relationsToLoad,
-                $callingParentRelationship);
+            $this->manageOptionalRelations(
+                $object,
+                $requestParams,
+                $errorMessages,
+                $relationsToLoad,
+                $callingParentRelationship
+            );
 
             /**
              * check content logic
@@ -215,10 +226,10 @@ class BaseModelController extends BaseController
      * @param array $requestParams
      * @param array $errorMessages
      * @param array $relationsToLoad
+     * @param array $callingParentRelationship
      */
     private function manageRequiredRelations(BaseModelInterface &$object, $requestParams = [], &$errorMessages,
-                                             &$relationsToLoad
-    )
+                                             &$relationsToLoad, $callingParentRelationship = [])
     {
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
@@ -261,7 +272,7 @@ class BaseModelController extends BaseController
                      * manage the current relation for the object
                      */
                     $managedRelationIds = [];
-                    $relationsToLoad[$relation] = [];
+                    $childRelations = [];
                     $this->recursivelyManageRelation(
                         $object,
                         $errorMessages,
@@ -269,8 +280,14 @@ class BaseModelController extends BaseController
                         $relationships['one'][$relation],
                         $values,
                         $managedRelationIds,
-                        $relationsToLoad[$relation]
+                        $childRelations
                     );
+
+                    if (!isset($callingParentRelationship['inverse'])
+                        || $callingParentRelationship['inverse'] != $relation
+                    ) {
+                        $relationsToLoad[$relation] = $childRelations;
+                    }
                 }
             }
         }
@@ -286,8 +303,7 @@ class BaseModelController extends BaseController
      * @param array $callingParentRelationship
      */
     private function manageOptionalRelations(BaseModelInterface &$object, $requestParams = [], &$errorMessages,
-                                             &$relationsToLoad, $callingParentRelationship = []
-    )
+                                             &$relationsToLoad, $callingParentRelationship = [])
     {
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
@@ -350,7 +366,7 @@ class BaseModelController extends BaseController
                  */
 
                 $managedRelationIds = [];
-                $relationsToLoad[$relation] = [];
+                $childRelations = [];
                 // if relation from request is empty, remove the related model from the object
                 if (empty($values)) {
                     $object->clearRelation($relation);
@@ -362,8 +378,14 @@ class BaseModelController extends BaseController
                         $relationships['one'][$relation],
                         $values,
                         $managedRelationIds,
-                        $relationsToLoad[$relation]
+                        $childRelations
                     );
+
+                    if (!isset($callingParentRelationship['inverse'])
+                        || $callingParentRelationship['inverse'] != $relation
+                    ) {
+                        $relationsToLoad[$relation] = $childRelations;
+                    }
                 }
             }
 
@@ -387,8 +409,7 @@ class BaseModelController extends BaseController
                      */
 
                     $managedRelationIds = [];
-                    $relationsToLoad[$relation] = [];
-
+                    $childRelations = [];
                     if (!is_int(array_keys($values)[0])) {
                         // only one to many values set given
                         $this->recursivelyManageRelation(
@@ -398,7 +419,7 @@ class BaseModelController extends BaseController
                             $relationships['many'][$relation],
                             $values,
                             $managedRelationIds,
-                            $relationsToLoad[$relation]
+                            $childRelations
                         );
                     } else {
                         // manage all related objects at once
@@ -410,9 +431,15 @@ class BaseModelController extends BaseController
                                 $relationships['many'][$relation],
                                 $singleRelationValues,
                                 $managedRelationIds,
-                                $relationsToLoad[$relation]
+                                $childRelations
                             );
                         }
+                    }
+
+                    if (!isset($callingParentRelationship['inverse'])
+                        || $callingParentRelationship['inverse'] != $relation
+                    ) {
+                        $relationsToLoad[$relation] = $childRelations;
                     }
 
                     /**
