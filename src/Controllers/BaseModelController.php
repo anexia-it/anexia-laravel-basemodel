@@ -465,13 +465,6 @@ class BaseModelController extends BaseController
             }
         }
 
-//        if ($relation == 'endAppConfigNegative' && count($relationValues) > 1) {
-//            var_dump($relatedObject->bricks);
-//            var_dump($relationValues);
-//            var_dump($edit);
-//            die();
-//        }
-
         /**
          * update existing relationObject
          * (if model does not define 'editable' => false for the relationship)
