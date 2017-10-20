@@ -228,10 +228,15 @@ class BaseModelController extends BaseController
          * @var array $values - current relation values (attributes) from request
          */
         foreach ($requestParams as $relation => $values) {
+            $ignoreParam = false;
             // if parameter ends with _id convert it to relation and add the id to $values
             $origLength = strlen($relation);
             $relation = preg_replace('/\_id$/','',$relation);
             if (strlen($relation) !== $origLength) {
+                // if a relation is given as both 'relation' and 'relation_id', ignore the 'relation_id' part
+                if (isset($requestParams[$relation])) {
+                    $ignoreParam = true;
+                }
                 if ($values > 0) {
                     $values = ['id' => $values];
                 } else {
@@ -239,29 +244,31 @@ class BaseModelController extends BaseController
                 }
             }
 
-            $relation = lcfirst(str_replace('_', '', ucwords($relation, '_')));
-            if (isset($relationships['one']) && in_array($relation, array_keys($relationships['one']))
-                && isset($relationships['one'][$relation]['nullable'])
-                && $relationships['one'][$relation]['nullable'] == false
-            ) {
-                /**
-                 * add a single new object (to-one-relation)
-                 */
+            if (!$ignoreParam) {
+                $relation = lcfirst(str_replace('_', '', ucwords($relation, '_')));
+                if (isset($relationships['one']) && in_array($relation, array_keys($relationships['one']))
+                    && isset($relationships['one'][$relation]['nullable'])
+                    && $relationships['one'][$relation]['nullable'] == false
+                ) {
+                    /**
+                     * add a single new object (to-one-relation)
+                     */
 
-                /**
-                 * manage the current relation for the object
-                 */
-                $managedRelationIds = [];
-                $relationsToLoad[$relation] = [];
-                $this->recursivelyManageRelation(
-                    $object,
-                    $errorMessages,
-                    $relation,
-                    $relationships['one'][$relation],
-                    $values,
-                    $managedRelationIds,
-                    $relationsToLoad[$relation]
-                );
+                    /**
+                     * manage the current relation for the object
+                     */
+                    $managedRelationIds = [];
+                    $relationsToLoad[$relation] = [];
+                    $this->recursivelyManageRelation(
+                        $object,
+                        $errorMessages,
+                        $relation,
+                        $relationships['one'][$relation],
+                        $values,
+                        $managedRelationIds,
+                        $relationsToLoad[$relation]
+                    );
+                }
             }
         }
     }
@@ -286,16 +293,15 @@ class BaseModelController extends BaseController
          */
         $prettyParams = [];
         foreach ($requestParams as $relation => $values) {
+            $ignoreParam = false;
             // if parameter ends with _id convert it to relation and add the id to $values
             $origLength = strlen($relation);
             $relation = preg_replace('/\_id$/','',$relation);
             if (strlen($relation) !== $origLength) {
                 // if a relation is given as both 'relation' and 'relation_id', ignore the 'relation_id' part
                 if (isset($requestParams[$relation])) {
-                    // stop iteration branch
-                    return ;
+                    $ignoreParam = true;
                 }
-
                 if ($values > 0) {
                     $values = ['id' => $values];
                 } else {
@@ -309,12 +315,14 @@ class BaseModelController extends BaseController
                 }
             }
 
-            if (isset($prettyParams[$relation])) {
-                foreach ($values as $k => $v) {
-                    $prettyParams[$relation][$k] = $v;
+            if (!$ignoreParam) {
+                if (isset($prettyParams[$relation])) {
+                    foreach ($values as $k => $v) {
+                        $prettyParams[$relation][$k] = $v;
+                    }
+                } else {
+                    $prettyParams[$relation] = $values;
                 }
-            } else {
-                $prettyParams[$relation] = $values;
             }
         }
 
