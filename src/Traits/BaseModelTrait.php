@@ -658,9 +658,7 @@ trait BaseModelTrait
             $query->where(function (Builder $q) use ($filters) {
                 foreach ($filters as $attribute => $value) {
                     if (is_int($attribute)) {
-                        $q->where(function (Builder $qu) use ($value) {
-                            self::addOrFilters($qu, $value);
-                        });
+                        self::addOrFilters($qu, $value);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -700,9 +698,7 @@ trait BaseModelTrait
             $query->orWhere(function (Builder $q) use ($orFilters) {
                 foreach ($orFilters as $attribute => $values) {
                     if (is_int($attribute)) {
-                        $q->where(function (Builder $qu) use ($values) {
-                            self::addFilters($qu, $values);
-                        });
+                        self::addFilters($qu, $values);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -742,9 +738,7 @@ trait BaseModelTrait
             $query->where(function (Builder $q) use ($searches) {
                 foreach ($searches as $attribute => $value) {
                     if (is_int($attribute)) {
-                        $q->where(function (Builder $qu) use ($value) {
-                            self::addOrSearches($qu, $value);
-                        });
+                        self::addOrSearches($q, $value);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -804,9 +798,7 @@ trait BaseModelTrait
             $query->orWhere(function (Builder $q) use ($orSearches) {
                 foreach ($orSearches as $attribute => $values) {
                     if (is_int($attribute)) {
-                        $q->where(function (Builder $qu) use ($values) {
-                            self::addFilters($qu, $values);
-                        });
+                        self::addSearches($q, $values);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -817,23 +809,20 @@ trait BaseModelTrait
                             self::orSearchRelation($q, $relation, $scopes, $values);
                         } else {
                             if (is_array($values)) {
-                                $q->where(function (Builder $qu) use ($attribute, $values) {
+                                $q->orWhere(function (Builder $qu) use ($attribute, $values) {
                                     $connection = $qu->getConnection();
 
                                     switch (get_class($connection)) {
                                         case \Illuminate\Database\PostgresConnection::class:
                                             foreach ($values as $value) {
-                                                $qu->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                                $qu->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
                                             }
                                             break;
                                         default:
                                             foreach ($values as $value) {
-                                                $qu->orWhere($attribute, 'LIKE', $value);
+                                                $qu->where($attribute, 'LIKE', $value);
                                             }
                                             break;
-                                    }
-                                    foreach ($values as $value) {
-                                        $qu->orWhere($attribute, $value);
                                     }
                                 });
                             } else {
