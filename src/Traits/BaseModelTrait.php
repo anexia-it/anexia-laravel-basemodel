@@ -524,14 +524,22 @@ trait BaseModelTrait
                             }
                         }
                     }
+                    $search = [];
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $searches[$searchField][] = '%' . $values . '%';
+                            $search[$searchField][] = '%' . $values . '%';
                         }
                     }
+                    if (!empty($search)) {
+                        $searches[] = $search;
+                    }
                 } else {
+                    $search = [];
                     foreach ($searchFields as $searchField) {
-                        $searches[$searchField] = '%' . $params['search'] . '%';
+                        $search[$searchField][] = '%' . $params['search'] . '%';
+                    }
+                    if (!empty($search)) {
+                        $searches[] = $search;
                     }
                 }
 
@@ -559,14 +567,22 @@ trait BaseModelTrait
                             }
                         }
                     }
+                    $search = [];
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $searches[$searchField][] = $values . '%';
+                            $search[$searchField][] = $values . '%';
                         }
                     }
+                    if (!empty($search)) {
+                        $searches[] = $search;
+                    }
                 } else {
+                    $search = [];
                     foreach ($searchFields as $searchField) {
-                        $searches[$searchField] = $params['search_start'] . '%';
+                        $search[$searchField][] = $params['search_start'] . '%';
+                    }
+                    if (!empty($search)) {
+                        $searches[] = $search;
                     }
                 }
 
@@ -594,14 +610,22 @@ trait BaseModelTrait
                             }
                         }
                     }
+                    $search = [];
                     foreach ($searchFields as $searchField) {
                         foreach ($defaultValues as $values) {
-                            $searches[$searchField][] = '%' . $values;
+                            $search[$searchField][] = '%' . $values;
                         }
                     }
+                    if (!empty($search)) {
+                        $searches[] = $search;
+                    }
                 } else {
+                    $search = [];
                     foreach ($searchFields as $searchField) {
-                        $searches[$searchField] = '%' . $params['search_end'];
+                        $search[$searchField][] = '%' . $params['search_end'];
+                    }
+                    if (!empty($search)) {
+                        $searches[] = $search;
                     }
                 }
 
@@ -717,41 +741,47 @@ trait BaseModelTrait
         if (!empty($searches)) {
             $query->where(function (Builder $q) use ($searches) {
                 foreach ($searches as $attribute => $value) {
-                    $scopes = explode('.', $attribute);
-
-                    if (count($scopes) > 1) {
-                        $relation = $scopes[0];
-                        unset($scopes[0]);
-                        $scopes = array_values($scopes);
-                        self::searchRelation($q, $relation, $scopes, $value);
+                    if (is_int($attribute)) {
+                        $q->where(function (Builder $qu) use ($value) {
+                            self::addOrSearches($qu, $value);
+                        });
                     } else {
-                        if (is_array($value)) {
-                            $q->where(function (Builder $qu) use ($attribute, $value) {
-                                $connection = $qu->getConnection();
+                        $scopes = explode('.', $attribute);
+
+                        if (count($scopes) > 1) {
+                            $relation = $scopes[0];
+                            unset($scopes[0]);
+                            $scopes = array_values($scopes);
+                            self::searchRelation($q, $relation, $scopes, $value);
+                        } else {
+                            if (is_array($value)) {
+                                $q->where(function (Builder $qu) use ($attribute, $value) {
+                                    $connection = $qu->getConnection();
+
+                                    switch (get_class($connection)) {
+                                        case \Illuminate\Database\PostgresConnection::class:
+                                            foreach ($value as $val) {
+                                                $qu->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $val);
+                                            }
+                                            break;
+                                        default:
+                                            foreach ($value as $val) {
+                                                $qu->orWhere($attribute, 'LIKE', $val);
+                                            }
+                                            break;
+                                    }
+                                });
+                            } else {
+                                $connection = $q->getConnection();
 
                                 switch (get_class($connection)) {
                                     case \Illuminate\Database\PostgresConnection::class:
-                                        foreach ($value as $val) {
-                                            $qu->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $val);
-                                        }
+                                        $q->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
                                         break;
                                     default:
-                                        foreach ($value as $val) {
-                                            $qu->orWhere($attribute, 'LIKE', $val);
-                                        }
+                                        $q->where($attribute, 'LIKE', $value);
                                         break;
                                 }
-                            });
-                        } else {
-                            $connection = $q->getConnection();
-
-                            switch (get_class($connection)) {
-                                case \Illuminate\Database\PostgresConnection::class:
-                                    $q->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
-                                    break;
-                                default:
-                                    $q->where($attribute, 'LIKE', $value);
-                                    break;
                             }
                         }
                     }
@@ -773,41 +803,50 @@ trait BaseModelTrait
         if (!empty($orSearches)) {
             $query->orWhere(function (Builder $q) use ($orSearches) {
                 foreach ($orSearches as $attribute => $values) {
-                    $scopes = explode('.', $attribute);
-
-                    if (count($scopes) > 1) {
-                        $relation = $scopes[0];
-                        unset($scopes[0]);
-                        $scopes = array_values($scopes);
-                        self::orSearchRelation($q, $relation, $scopes, $values);
+                    if (is_int($attribute)) {
+                        $q->where(function (Builder $qu) use ($values) {
+                            self::addFilters($qu, $values);
+                        });
                     } else {
-                        if (is_array($values)) {
-                            $q->where(function (Builder $qu) use ($attribute, $values) {
-                                $connection = $qu->getConnection();
+                        $scopes = explode('.', $attribute);
+
+                        if (count($scopes) > 1) {
+                            $relation = $scopes[0];
+                            unset($scopes[0]);
+                            $scopes = array_values($scopes);
+                            self::orSearchRelation($q, $relation, $scopes, $values);
+                        } else {
+                            if (is_array($values)) {
+                                $q->where(function (Builder $qu) use ($attribute, $values) {
+                                    $connection = $qu->getConnection();
+
+                                    switch (get_class($connection)) {
+                                        case \Illuminate\Database\PostgresConnection::class:
+                                            foreach ($values as $value) {
+                                                $qu->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                            }
+                                            break;
+                                        default:
+                                            foreach ($values as $value) {
+                                                $qu->orWhere($attribute, 'LIKE', $value);
+                                            }
+                                            break;
+                                    }
+                                    foreach ($values as $value) {
+                                        $qu->orWhere($attribute, $value);
+                                    }
+                                });
+                            } else {
+                                $connection = $q->getConnection();
 
                                 switch (get_class($connection)) {
                                     case \Illuminate\Database\PostgresConnection::class:
-                                        foreach ($values as $value) {
-                                            $qu->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
-                                        }
+                                        $q->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $values);
                                         break;
                                     default:
-                                        foreach ($values as $value) {
-                                            $qu->where($attribute, 'LIKE', $value);
-                                        }
+                                        $q->orWhere($attribute, 'LIKE', $values);
                                         break;
                                 }
-                            });
-                        } else {
-                            $connection = $q->getConnection();
-
-                            switch (get_class($connection)) {
-                                case \Illuminate\Database\PostgresConnection::class:
-                                    $q->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $values);
-                                    break;
-                                default:
-                                    $q->orWhere($attribute, 'LIKE', $values);
-                                    break;
                             }
                         }
                     }
