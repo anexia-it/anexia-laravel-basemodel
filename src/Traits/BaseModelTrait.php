@@ -658,7 +658,7 @@ trait BaseModelTrait
             $query->where(function (Builder $q) use ($filters) {
                 foreach ($filters as $attribute => $value) {
                     if (is_int($attribute)) {
-                        self::addOrFilters($qu, $value);
+                        self::addOrFilters($q, $value);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -698,7 +698,7 @@ trait BaseModelTrait
             $query->orWhere(function (Builder $q) use ($orFilters) {
                 foreach ($orFilters as $attribute => $values) {
                     if (is_int($attribute)) {
-                        self::addFilters($qu, $values);
+                        self::addFilters($q, $values);
                     } else {
                         $scopes = explode('.', $attribute);
 
