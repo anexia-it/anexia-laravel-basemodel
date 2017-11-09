@@ -636,7 +636,7 @@ trait BaseModelTrait
              * set other filters
              */
             foreach ($attributes as $attribute) {
-                if (isset($params[$attribute])) {
+                if (array_key_exists($attribute, $params)) {
                     $filters[$attribute] = $params[$attribute];
                     unset($params[$attribute]);
                 }
