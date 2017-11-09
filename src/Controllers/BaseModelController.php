@@ -336,7 +336,7 @@ class BaseModelController extends BaseController
             }
 
             if (!$ignoreParam) {
-                if (isset($prettyParams[$relation])) {
+                if (isset($prettyParams[$relation]) && is_array($values)) {
                     foreach ($values as $k => $v) {
                         $prettyParams[$relation][$k] = $v;
                     }
