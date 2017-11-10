@@ -355,7 +355,8 @@ trait BaseModelTrait
             $filters,
             $orFilters,
             $searches,
-            $orSearches
+            $orSearches,
+            $notEmptyFilters
         );
 
         /**
@@ -371,7 +372,11 @@ trait BaseModelTrait
         /**
          * filtering
          */
-        $query->where(function (Builder $q) use ($filters, $orFilters) {
+        $query->where(function (Builder $q) use ($filters, $orFilters, $notEmptyFilters) {
+            // add not empty and not null filters
+            // (->whereNotNull('field')->where('field', '<>', ''))
+            self::addNotEmptyFilters($q, $notEmptyFilters);
+
             // add filters
             // (->where('field', 'attribute'))
             self::addFilters($q, $filters);
@@ -428,10 +433,11 @@ trait BaseModelTrait
      * @param array $orFilters
      * @param array $searches
      * @param array $orSearches
+     * @param array $notEmptyFilters
      */
     private static function extractFromParams($params, $modelClass, &$page = 1,
                                               &$pagination = 10, &$includes = [], &$sortings = [], &$filters = [],
-                                              &$orFilters = [], &$searches = [], &$orSearches = [])
+                                              &$orFilters = [], &$searches = [], &$orSearches = [], &$notEmptyFilters = [])
     {
         if (!empty($params)) {
             /** @var BaseModelInterface $instance */
@@ -641,6 +647,48 @@ trait BaseModelTrait
                     unset($params[$attribute]);
                 }
             }
+
+            /**
+             * set not empty filters
+             */
+            if (isset($params['not_empty'])) {
+                foreach ($attributes as $attribute) {
+                    if (in_array($attribute, $params['not_empty'])) {
+                        $notEmptyFilters[$attribute] = $attribute;
+                    }
+                }
+                unset($params['not_empty']);
+            }
+        }
+    }
+
+    /**
+     * add WHERE conditions to a query
+     * to only return results that match certain filter criteria
+     * (->whereNotNull('field')->where('field', '<>', ''))
+     *
+     * @param Builder $query
+     * @param array $notEmptyFilters
+     */
+    public static function addNotEmptyFilters(Builder &$query, $notEmptyFilters = [])
+    {
+        if (!empty($notEmptyFilters)) {
+            $query->where(function (Builder $q) use ($notEmptyFilters) {
+                foreach ($notEmptyFilters as $attribute) {
+
+                    $scopes = explode('.', $attribute);
+
+                    if (count($scopes) > 1) {
+                        $relation = $scopes[0];
+                        unset($scopes[0]);
+                        $relAttribute = array_values($scopes);
+                        self::filterRelation($q, $relation, $relAttribute, '', true);
+                    } else {
+                        $q->whereNotNull($attribute);
+                        $q->where($attribute, '<>', '');
+                    }
+                }
+            });
         }
     }
 
@@ -883,25 +931,31 @@ trait BaseModelTrait
      * @param string $relation
      * @param array $attribute
      * @param string $value
+     * @param boolean|false $notEmpty
      */
-    private static function filterRelation(Builder &$query, $relation = '', $attribute = [], $value = '')
+    private static function filterRelation(Builder &$query, $relation = '', $attribute = [], $value = '', $notEmpty = false)
     {
         // get entity that has relation with certain attribute value
-        $query->whereHas($relation, function (Builder $q) use ($attribute, $value) {
+        $query->whereHas($relation, function (Builder $q) use ($attribute, $value, $notEmpty) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
                 $attribute = array_values($attribute);
-                self::filterRelation($q, $relation, $attribute, $value);
+                self::filterRelation($q, $relation, $attribute, $value, $notEmpty);
             } else {
-                if (is_array($value)) {
-                    $q->where(function (Builder $qu) use ($attribute, $value) {
-                        foreach ($value as $val) {
-                            $qu->orWhere($attribute[0], $val);
-                        }
-                    });
+                if ($notEmpty) {
+                    $q->whereNotNull($attribute);
+                    $q->where($attribute, '<>', '');
                 } else {
-                    $q->where($attribute[0], $value);
+                    if (is_array($value)) {
+                        $q->where(function (Builder $qu) use ($attribute, $value) {
+                            foreach ($value as $val) {
+                                $qu->orWhere($attribute[0], $val);
+                            }
+                        });
+                    } else {
+                        $q->where($attribute[0], $value);
+                    }
                 }
             }
         });
