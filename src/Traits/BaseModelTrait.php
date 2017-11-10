@@ -652,10 +652,14 @@ trait BaseModelTrait
              * set not empty filters
              */
             if (isset($params['not_empty'])) {
-                foreach ($attributes as $attribute) {
-                    if (in_array($attribute, $params['not_empty'])) {
-                        $notEmptyFilters[$attribute] = $attribute;
+                if (is_array($params['not_empty'])) {
+                    foreach ($attributes as $attribute) {
+                        if (in_array($attribute, $params['not_empty'])) {
+                            $notEmptyFilters[$attribute] = $attribute;
+                        }
                     }
+                } else {
+                    $notEmptyFilters[$params['not_empty']] = $params['not_empty'];
                 }
                 unset($params['not_empty']);
             }
