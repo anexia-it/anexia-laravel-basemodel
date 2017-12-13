@@ -3,6 +3,15 @@
     "description": "A laravel module that provides traits to extend eloquent model's filter, search, sorting, pagination, functionality",
     "version": "1.0.0",
     "license": "MIT",
+    "require": {
+        "anexia/laravel-encryption": "dev-master"
+    },
+    "repositories": [
+        {
+            "type": "git",
+            "url": "git@gitlab.anx.local:anexia-developme/anexia-laravel-encryption.git"
+        }
+    ],
     "autoload": {
         "psr-4": {
             "Anexia\\BaseModel\\": "src",

@@ -3,6 +3,7 @@
 namespace Anexia\BaseModel\Traits;
 
 use Anexia\BaseModel\Interfaces\BaseModelInterface;
+use Anexia\LaravelEncryption\DatabaseEncryption;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\RelationNotFoundException;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\Lang;
 
 trait BaseModelTrait
 {
+    use DatabaseEncryption;
+
     /** @var int */
     protected static $pagination = 10;
 
@@ -35,6 +38,14 @@ trait BaseModelTrait
                 $this->$key = $value;
             }
         }
+    }
+
+    /**
+     * empty implementation of abstract method
+     */
+    protected function getEncryptKey()
+    {
+        //
     }
 
     /**
@@ -319,6 +330,7 @@ trait BaseModelTrait
      * Get all model objects (filtered, sorted, paginated, with their included relation objects) from the database.
      *
      * @param array $columns
+     * @param string|null $decryptionKey
      * @param array|mixed $preSetFilters
      * @param array|mixed $preSetOrFilters
      * @param array|mixed $preSetIncludes
@@ -326,7 +338,7 @@ trait BaseModelTrait
      * @param array|mixed $preSetOrSearches
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
-    public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [],
+    public static function allExtended($columns = ['*'], $decryptionKey = null, $preSetFilters = [], $preSetOrFilters = [],
                                        $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = [])
     {
         $request = request();
@@ -366,35 +378,40 @@ trait BaseModelTrait
             return $page;
         });
 
-        /** @var Builder $query */
-        $query = $modelClass::query();
+        if ($decryptionKey) {
+            /** @var Builder $query */
+            $query = $modelClass::withDecryptKey($decryptionKey);
+        } else {
+            /** @var Builder $query */
+            $query = $modelClass::query();
+        }
 
         /**
          * filtering
          */
-        $query->where(function (Builder $q) use ($filters, $orFilters, $notEmptyFilters) {
+        $query->where(function (Builder $q) use ($filters, $orFilters, $notEmptyFilters, $decryptionKey) {
             // add not empty and not null filters
             // (->whereNotNull('field')->where('field', '<>', ''))
             self::addNotEmptyFilters($q, $notEmptyFilters);
 
             // add filters
             // (->where('field', 'attribute'))
-            self::addFilters($q, $filters);
+            self::addFilters($q, $filters, $decryptionKey);
 
             // add OR filters
             // (->orWhere('field', 'attribute1')->orWhere('field', 'attribute2'))
 
-            self::addOrFilters($q, $orFilters);
+            self::addOrFilters($q, $orFilters, $decryptionKey);
         });
 
-        $query->where(function (Builder $q) use ($searches, $orSearches) {
+        $query->where(function (Builder $q) use ($searches, $orSearches, $decryptionKey) {
             // add LIKE filters
             // (->where('field', 'LIKE', '%attribute%'))
-            self::addSearches($q, $searches);
+            self::addSearches($q, $searches, $decryptionKey);
 
             // add OR LIKE filters
             // (->orWhere('field', 'LIKE', '%attribute1%')->orWhere('field', 'LIKE', '%attribute2%'))
-            self::addOrSearches($q, $orSearches);
+            self::addOrSearches($q, $orSearches, $decryptionKey);
         });
 
         /**
@@ -402,7 +419,7 @@ trait BaseModelTrait
          */
         // add sorting
         // (->orderBy(field, direction))
-        self::addSortings($query, $sortings);
+        self::addSortings($query, $sortings, $decryptionKey);
 
         /**
          * pagination
@@ -703,14 +720,15 @@ trait BaseModelTrait
      *
      * @param Builder $query
      * @param array $filters
+     * @param string|null $decryptionKey
      */
-    public static function addFilters(Builder &$query, $filters = [])
+    public static function addFilters(Builder &$query, $filters = [], $decryptionKey = null)
     {
         if (!empty($filters)) {
-            $query->where(function (Builder $q) use ($filters) {
+            $query->where(function (Builder $q) use ($filters, $decryptionKey) {
                 foreach ($filters as $attribute => $value) {
                     if (is_int($attribute)) {
-                        self::addOrFilters($q, $value);
+                        self::addOrFilters($q, $value, $decryptionKey);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -718,16 +736,26 @@ trait BaseModelTrait
                             $relation = $scopes[0];
                             unset($scopes[0]);
                             $relAttribute = array_values($scopes);
-                            self::filterRelation($q, $relation, $relAttribute, $value);
+                            self::filterRelation($q, $relation, $relAttribute, $value, $decryptionKey);
                         } else {
                             if (is_array($value)) {
-                                $q->where(function (Builder $qu) use ($attribute, $value) {
-                                    foreach ($value as $val) {
-                                        $qu->orWhere($attribute, $val);
+                                $q->where(function (Builder $qu) use ($attribute, $value, $decryptionKey) {
+                                    if ($decryptionKey) {
+                                        foreach ($value as $val) {
+                                            $qu->orWhereDecrypted($attribute, '=', $val, $decryptionKey);
+                                        }
+                                    } else {
+                                        foreach ($value as $val) {
+                                            $qu->orWhere($attribute, $val);
+                                        }
                                     }
                                 });
                             } else {
-                                $q->where($attribute, $value);
+                                if ($decryptionKey && in_array($attribute, static::getEncryptedFields())) {
+                                    $q->whereDecrypted($attribute, '=', $value, $decryptionKey);
+                                } else {
+                                    $q->where($attribute, $value);
+                                }
                             }
                         }
                     }
@@ -743,14 +771,15 @@ trait BaseModelTrait
      *
      * @param Builder $query
      * @param array $orFilters
+     * @param string|null $decryptionKey
      */
-    public static function addOrFilters(Builder &$query, $orFilters = [])
+    public static function addOrFilters(Builder &$query, $orFilters = [], $decryptionKey = null)
     {
         if (!empty($orFilters)) {
-            $query->orWhere(function (Builder $q) use ($orFilters) {
+            $query->orWhere(function (Builder $q) use ($orFilters, $decryptionKey) {
                 foreach ($orFilters as $attribute => $values) {
                     if (is_int($attribute)) {
-                        self::addFilters($q, $values);
+                        self::addFilters($q, $values, $decryptionKey);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -758,16 +787,26 @@ trait BaseModelTrait
                             $relation = $scopes[0];
                             unset($scopes[0]);
                             $scopes = array_values($scopes);
-                            self::orFilterRelation($q, $relation, $scopes, $values);
+                            self::orFilterRelation($q, $relation, $scopes, $values, $decryptionKey);
                         } else {
                             if (is_array($values)) {
-                                $q->orWhere(function (Builder $qu) use ($attribute, $values) {
-                                    foreach ($values as $value) {
-                                        $qu->orWhere($attribute, $value);
+                                $q->orWhere(function (Builder $qu) use ($attribute, $values, $decryptionKey) {
+                                    if ($decryptionKey) {
+                                        foreach ($values as $value) {
+                                            $qu->whereDecrypted($attribute, '=', $value, $decryptionKey);
+                                        }
+                                    } else {
+                                        foreach ($values as $value) {
+                                            $qu->where($attribute, $value);
+                                        }
                                     }
                                 });
                             } else {
-                                $q->orWhere($attribute, $values);
+                                if ($decryptionKey) {
+                                    $q->orWhereDecrypted($attribute, '=', $values, $decryptionKey);
+                                } else {
+                                    $q->orWhere($attribute, $values);
+                                }
                             }
                         }
                     }
@@ -783,14 +822,15 @@ trait BaseModelTrait
      *
      * @param Builder $query
      * @param array $searches
+     * @param string|null $decryptionKey
      */
-    public static function addSearches(Builder &$query, $searches = [])
+    public static function addSearches(Builder &$query, $searches = [], $decryptionKey = null)
     {
         if (!empty($searches)) {
-            $query->where(function (Builder $q) use ($searches) {
+            $query->where(function (Builder $q) use ($searches, $decryptionKey) {
                 foreach ($searches as $attribute => $value) {
                     if (is_int($attribute)) {
-                        self::addOrSearches($q, $value);
+                        self::addOrSearches($q, $value, $decryptionKey);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -798,21 +838,33 @@ trait BaseModelTrait
                             $relation = $scopes[0];
                             unset($scopes[0]);
                             $scopes = array_values($scopes);
-                            self::searchRelation($q, $relation, $scopes, $value);
+                            self::searchRelation($q, $relation, $scopes, $value, $decryptionKey);
                         } else {
                             if (is_array($value)) {
-                                $q->where(function (Builder $qu) use ($attribute, $value) {
+                                $q->where(function (Builder $qu) use ($attribute, $value, $decryptionKey) {
                                     $connection = $qu->getConnection();
 
                                     switch (get_class($connection)) {
                                         case \Illuminate\Database\PostgresConnection::class:
-                                            foreach ($value as $val) {
-                                                $qu->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $val);
+                                            if ($decryptionKey) {
+                                                foreach ($value as $val) {
+                                                    $qu->orWhereDecrypted(DB::Raw($attribute . '::TEXT'), 'ILIKE', $val, $decryptionKey);
+                                                }
+                                            } else {
+                                                foreach ($value as $val) {
+                                                    $qu->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $val);
+                                                }
                                             }
                                             break;
                                         default:
-                                            foreach ($value as $val) {
-                                                $qu->orWhere($attribute, 'LIKE', $val);
+                                            if ($decryptionKey) {
+                                                foreach ($value as $val) {
+                                                    $qu->orWhereDecrypted($attribute, 'LIKE', $val, $decryptionKey);
+                                                }
+                                            } else {
+                                                foreach ($value as $val) {
+                                                    $qu->orWhere($attribute, 'LIKE', $val);
+                                                }
                                             }
                                             break;
                                     }
@@ -822,10 +874,18 @@ trait BaseModelTrait
 
                                 switch (get_class($connection)) {
                                     case \Illuminate\Database\PostgresConnection::class:
-                                        $q->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                        if ($decryptionKey) {
+                                            $q->whereDecrypted(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value, $decryptionKey);
+                                        } else {
+                                            $q->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                        }
                                         break;
                                     default:
-                                        $q->where($attribute, 'LIKE', $value);
+                                        if ($decryptionKey) {
+                                            $q->whereDecrypted($attribute, 'LIKE', $value, $decryptionKey);
+                                        } else {
+                                            $q->where($attribute, 'LIKE', $value);
+                                        }
                                         break;
                                 }
                             }
@@ -843,14 +903,15 @@ trait BaseModelTrait
      *
      * @param Builder $query
      * @param array $orSearches
+     * @param string|null $decryptionKey
      */
-    public static function addOrSearches(Builder &$query, $orSearches = [])
+    public static function addOrSearches(Builder &$query, $orSearches = [], $decryptionKey = null)
     {
         if (!empty($orSearches)) {
-            $query->orWhere(function (Builder $q) use ($orSearches) {
+            $query->orWhere(function (Builder $q) use ($orSearches, $decryptionKey) {
                 foreach ($orSearches as $attribute => $values) {
                     if (is_int($attribute)) {
-                        self::addSearches($q, $values);
+                        self::addSearches($q, $values, $decryptionKey);
                     } else {
                         $scopes = explode('.', $attribute);
 
@@ -858,21 +919,33 @@ trait BaseModelTrait
                             $relation = $scopes[0];
                             unset($scopes[0]);
                             $scopes = array_values($scopes);
-                            self::orSearchRelation($q, $relation, $scopes, $values);
+                            self::orSearchRelation($q, $relation, $scopes, $values, $decryptionKey);
                         } else {
                             if (is_array($values)) {
-                                $q->orWhere(function (Builder $qu) use ($attribute, $values) {
+                                $q->orWhere(function (Builder $qu) use ($attribute, $values, $decryptionKey) {
                                     $connection = $qu->getConnection();
 
                                     switch (get_class($connection)) {
                                         case \Illuminate\Database\PostgresConnection::class:
-                                            foreach ($values as $value) {
-                                                $qu->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                            if ($decryptionKey) {
+                                                foreach ($values as $value) {
+                                                    $qu->whereDecrypted(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value, $decryptionKey);
+                                                }
+                                            } else {
+                                                foreach ($values as $value) {
+                                                    $qu->where(DB::Raw($attribute . '::TEXT'), 'ILIKE', $value);
+                                                }
                                             }
                                             break;
                                         default:
-                                            foreach ($values as $value) {
-                                                $qu->where($attribute, 'LIKE', $value);
+                                            if ($decryptionKey) {
+                                                foreach ($values as $value) {
+                                                    $qu->whereDecrypted($attribute, 'LIKE', $value, $decryptionKey);
+                                                }
+                                            } else {
+                                                foreach ($values as $value) {
+                                                    $qu->where($attribute, 'LIKE', $value);
+                                                }
                                             }
                                             break;
                                     }
@@ -882,10 +955,18 @@ trait BaseModelTrait
 
                                 switch (get_class($connection)) {
                                     case \Illuminate\Database\PostgresConnection::class:
-                                        $q->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $values);
+                                        if ($decryptionKey) {
+                                            $q->orWhereDecrypted(DB::Raw($attribute . '::TEXT'), 'ILIKE', $values, $decryptionKey);
+                                        } else {
+                                            $q->orWhere(DB::Raw($attribute . '::TEXT'), 'ILIKE', $values);
+                                        }
                                         break;
                                     default:
-                                        $q->orWhere($attribute, 'LIKE', $values);
+                                        if ($decryptionKey) {
+                                            $q->orWhereDecrypted($attribute, 'LIKE', $values, $decryptionKey);
+                                        } else {
+                                            $q->orWhere($attribute, 'LIKE', $values);
+                                        }
                                         break;
                                 }
                             }
@@ -902,12 +983,19 @@ trait BaseModelTrait
      *
      * @param Builder $query
      * @param array $sortings
+     * @param string|null $decryptionKey
      */
-    public static function addSortings(Builder &$query, $sortings = [])
+    public static function addSortings(Builder &$query, $sortings = [], $decryptionKey = null)
     {
         if (!empty($sortings)) {
-            foreach ($sortings as $sortField => $sortDirection) {
-                $query->orderBy($sortField, $sortDirection);
+            if ($decryptionKey) {
+                foreach ($sortings as $sortField => $sortDirection) {
+                    $query->orderByDecrypted($sortField, $sortDirection, $decryptionKey);
+                }
+            } else {
+                foreach ($sortings as $sortField => $sortDirection) {
+                    $query->orderBy($sortField, $sortDirection);
+                }
             }
         }
     }
@@ -936,29 +1024,41 @@ trait BaseModelTrait
      * @param array $attribute
      * @param string $value
      * @param boolean|false $notEmpty
+     * @param string|null $decryptionKey
      */
-    private static function filterRelation(Builder &$query, $relation = '', $attribute = [], $value = '', $notEmpty = false)
+    private static function filterRelation(Builder &$query, $relation = '', $attribute = [], $value = '',
+                                           $notEmpty = false, $decryptionKey = null)
     {
         // get entity that has relation with certain attribute value
-        $query->whereHas($relation, function (Builder $q) use ($attribute, $value, $notEmpty) {
+        $query->whereHas($relation, function (Builder $q) use ($attribute, $value, $notEmpty, $decryptionKey) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
                 $attribute = array_values($attribute);
-                self::filterRelation($q, $relation, $attribute, $value, $notEmpty);
+                self::filterRelation($q, $relation, $attribute, $value, $notEmpty, $decryptionKey);
             } else {
                 if ($notEmpty) {
                     $q->whereNotNull($attribute);
                     $q->where($attribute, '<>', '');
                 } else {
                     if (is_array($value)) {
-                        $q->where(function (Builder $qu) use ($attribute, $value) {
-                            foreach ($value as $val) {
-                                $qu->orWhere($attribute[0], $val);
+                        $q->where(function (Builder $qu) use ($attribute, $value, $decryptionKey) {
+                            if ($decryptionKey) {
+                                foreach ($value as $val) {
+                                    $qu->orWhereDecrypted($attribute[0], '=', $val, $decryptionKey);
+                                }
+                            } else {
+                                foreach ($value as $val) {
+                                    $qu->orWhere($attribute[0], $val);
+                                }
                             }
                         });
                     } else {
-                        $q->where($attribute[0], $value);
+                        if ($decryptionKey) {
+                            $q->whereDecrypted($attribute[0], '=', $value, $decryptionKey);
+                        } else {
+                            $q->where($attribute[0], $value);
+                        }
                     }
                 }
             }
@@ -970,25 +1070,37 @@ trait BaseModelTrait
      * @param string $relation
      * @param array $attribute
      * @param array $values
+     * @param string|null $decryptionKey
      */
-    private static function orFilterRelation(Builder &$query, $relation = '', $attribute = [], $values = [])
+    private static function orFilterRelation(Builder &$query, $relation = '', $attribute = [], $values = [],
+                                             $decryptionKey = null)
     {
         // get entity that has relation with certain attribute value
-        $query->orWhereHas($relation, function (Builder $q) use ($relation, $attribute, $values) {
+        $query->orWhereHas($relation, function (Builder $q) use ($relation, $attribute, $values, $decryptionKey) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
                 $attributes = array_values($attribute);
-                self::filterRelation($q, $relation, $attributes, $values);
+                self::filterRelation($q, $relation, $attributes, $values, $decryptionKey);
             } else {
                 if (is_array($values)) {
-                    $q->where(function (Builder $qu) use ($attribute, $values) {
-                        foreach ($values as $value) {
-                            $qu->orWhere($attribute[0], $value);
+                    $q->where(function (Builder $qu) use ($attribute, $values, $decryptionKey) {
+                        if ($decryptionKey) {
+                            foreach ($values as $value) {
+                                $qu->orWhereDecrypted($attribute[0], '=', $value, $decryptionKey);
+                            }
+                        } else {
+                            foreach ($values as $value) {
+                                $qu->orWhere($attribute[0], $value);
+                            }
                         }
                     });
                 } else {
-                    $q->where($attribute[0], $values);
+                    if ($decryptionKey) {
+                        $q->whereDecrypted($attribute[0], '=', $values, $decryptionKey);
+                    } else {
+                        $q->where($attribute[0], $values);
+                    }
                 }
             }
         });
@@ -999,25 +1111,33 @@ trait BaseModelTrait
      * @param string $relation
      * @param array $attribute
      * @param string $value
+     * @param string|null $decryptionKey
      */
-    private static function searchRelation(Builder &$query, $relation = '', $attribute = [], $value = '')
+    private static function searchRelation(Builder &$query, $relation = '', $attribute = [], $value = '',
+                                           $decryptionKey = null)
     {
         // get entity that has relation with certain attribute LIKE the value
-        $query->whereHas($relation, function (Builder $q) use ($attribute, $value) {
+        $query->whereHas($relation, function (Builder $q) use ($attribute, $value, $decryptionKey) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
                 $attribute = array_values($attribute);
-                self::searchRelation($q, $relation, $attribute, $value);
+                self::searchRelation($q, $relation, $attribute, $value, $decryptionKey);
             } else {
                 if (is_array($value)) {
-                    $q->where(function (Builder $qu) use ($attribute, $value) {
+                    $q->where(function (Builder $qu) use ($attribute, $value, $decryptionKey) {
                         $connection = $qu->getConnection();
 
                         switch (get_class($connection)) {
                             case \Illuminate\Database\PostgresConnection::class:
-                                foreach ($value as $val) {
-                                    $qu->orWhere(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $val);
+                                if ($decryptionKey) {
+                                    foreach ($value as $val) {
+                                        $qu->orWhereDecrypted(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $val, $decryptionKey);
+                                    }
+                                } else {
+                                    foreach ($value as $val) {
+                                        $qu->orWhere(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $val);
+                                    }
                                 }
                                 break;
                             default:
@@ -1032,10 +1152,18 @@ trait BaseModelTrait
 
                     switch (get_class($connection)) {
                         case \Illuminate\Database\PostgresConnection::class:
-                            $q->where(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value);
+                            if ($decryptionKey) {
+                                $q->whereDecrypted(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value, $decryptionKey);
+                            } else {
+                                $q->where(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value);
+                            }
                             break;
                         default:
-                            $q->where($attribute[0], 'LIKE', $value);
+                            if ($decryptionKey) {
+                                $q->whereDecrypted($attribute[0], 'LIKE', $value, $decryptionKey);
+                            } else {
+                                $q->where($attribute[0], 'LIKE', $value);
+                            }
                             break;
                     }
                 }
@@ -1048,30 +1176,44 @@ trait BaseModelTrait
      * @param string $relation
      * @param array $attribute
      * @param array $values
+     * @param string|null $decryptionKey
      */
-    private static function orSearchRelation(Builder &$query, $relation = '', $attribute = [], $values = [])
+    private static function orSearchRelation(Builder &$query, $relation = '', $attribute = [], $values = [],
+                                             $decryptionKey = null)
     {
         // get entity that has relation with certain attribute LIKE the value
-        $query->orWhereHas($relation, function (Builder $q) use ($attribute, $values) {
+        $query->orWhereHas($relation, function (Builder $q) use ($attribute, $values, $decryptionKey) {
             if (count($attribute) > 1) {
                 $relation = $attribute[0];
                 unset($attribute[0]);
                 $attribute = array_values($attribute);
-                self::searchRelation($q, $relation, $attribute, $values);
+                self::searchRelation($q, $relation, $attribute, $values, $decryptionKey);
             } else {
                 if (is_array($values)) {
-                    $q->where(function (Builder $qu) use ($attribute, $values) {
+                    $q->where(function (Builder $qu) use ($attribute, $values, $decryptionKey) {
                         $connection = $qu->getConnection();
 
                         switch (get_class($connection)) {
                             case \Illuminate\Database\PostgresConnection::class:
-                                foreach ($values as $value) {
-                                    $qu->orWhere(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value);
+                                if ($decryptionKey) {
+                                    foreach ($values as $value) {
+                                        $qu->orWhereDecrypted(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value, $decryptionKey);
+                                    }
+                                } else {
+                                    foreach ($values as $value) {
+                                        $qu->orWhere(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $value);
+                                    }
                                 }
                                 break;
                             default:
-                                foreach ($values as $value) {
-                                    $qu->orWhere($attribute[0], 'LIKE', $value);
+                                if ($decryptionKey) {
+                                    foreach ($values as $value) {
+                                        $qu->orWhereDecrypted($attribute[0], 'LIKE', $value, $decryptionKey);
+                                    }
+                                } else {
+                                    foreach ($values as $value) {
+                                        $qu->orWhere($attribute[0], 'LIKE', $value);
+                                    }
                                 }
                                 break;
                         }
@@ -1081,10 +1223,18 @@ trait BaseModelTrait
 
                     switch (get_class($connection)) {
                         case \Illuminate\Database\PostgresConnection::class:
-                            $q->where(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $values);
+                            if ($decryptionKey) {
+                                $q->whereDecrypted(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $values, $decryptionKey);
+                            } else {
+                                $q->where(DB::Raw($attribute[0] . '::TEXT'), 'ILIKE', $values);
+                            }
                             break;
                         default:
-                            $q->where($attribute[0], 'LIKE', $values);
+                            if ($decryptionKey) {
+                                $q->whereDecrypted($attribute[0], 'LIKE', $values, $decryptionKey);
+                            } else {
+                                $q->where($attribute[0], 'LIKE', $values);
+                            }
                             break;
                     }
                 }
@@ -1100,9 +1250,11 @@ trait BaseModelTrait
      * @param array $columns
      * @param array $preSetFilters
      * @param array $preSetIncludes
+     * @param string|null $decryptionKey
      * @return Model
      */
-    public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = [])
+    public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = [],
+                                        $decryptionKey = null)
     {
         $request = request();
 
@@ -1139,7 +1291,11 @@ trait BaseModelTrait
              * filtering
              */
             if (!empty($filters)) {
-                $query = $modelClass::query()->where('id', $id);
+                if ($decryptionKey) {
+                    $query = $modelClass::withDecryptKey($decryptionKey)->whereDecrypted('id', '=', $id, $decryptionKey);
+                } else {
+                    $query = $modelClass::query()->where('id', $id);
+                }
 
                 // add filters
                 // (->where('field', 'attribute'))
@@ -1148,8 +1304,13 @@ trait BaseModelTrait
                 /** @var Model $entity */
                 $entity = $query->with($formattedIncludes)->firstOrFail($columns);
             } else {
-                /** @var Model $entity */
-                $entity = $modelClass::with($formattedIncludes)->find($id, $columns);
+                if ($decryptionKey) {
+                    /** @var Model $entity */
+                    $entity = $modelClass::withDecryptKey($decryptionKey)->with($formattedIncludes)->find($id, $columns);
+                } else {
+                    /** @var Model $entity */
+                    $entity = $modelClass::with($formattedIncludes)->find($id, $columns);
+                }
             }
         } catch (RelationNotFoundException $e) {
             $message = Lang::get(
