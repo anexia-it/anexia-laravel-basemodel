@@ -4,6 +4,7 @@ namespace Anexia\BaseModel\Traits;
 
 use Anexia\BaseModel\Interfaces\BaseModelInterface;
 use Anexia\LaravelEncryption\DatabaseEncryption;
+use App\Traits\DecryptionKeyFromAccessToken;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\RelationNotFoundException;
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Lang;
 
 trait BaseModelTrait
 {
-    use DatabaseEncryption;
+    use DatabaseEncryption, DecryptionKeyFromAccessToken;
 
     /** @var int */
     protected static $pagination = 10;
@@ -421,6 +422,7 @@ trait BaseModelTrait
         // (->orderBy(field, direction))
         self::addSortings($query, $sortings, $decryptionKey);
 
+        var_dump($query->toSql());
         /**
          * pagination
          */

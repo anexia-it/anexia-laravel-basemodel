@@ -6,6 +6,7 @@ use Anexia\BaseModel\Interfaces\BaseModelInterface;
 use Anexia\BaseModel\Database\Connection;
 use Anexia\BaseModel\Exceptions\Query\SqlException;
 use Anexia\BaseModel\Exceptions\Validation\BulkValidationException;
+use App\Traits\DecryptionKeyFromAccessToken;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -24,7 +25,7 @@ use PDF;
 
 class BaseModelController extends BaseController
 {
-    use AuthorizesRequests, DispatchesJobs, ValidatesRequests;
+    use AuthorizesRequests, DispatchesJobs, ValidatesRequests, DecryptionKeyFromAccessToken;
 
     /** string */
     const EXPORT_TYPE_PDF = 'pdf';
@@ -623,6 +624,9 @@ class BaseModelController extends BaseController
             $tmpRequest->setMethod(request()->getMethod());
             $tmpRequest->merge($requestParams);
             $tmpRequest->setUserResolver(request()->getUserResolver());
+            if (count(request()->headers)) {
+                $tmpRequest->headers->add((array) request()->headers);
+            }
 
             // validate only the params with the rules
             $this->validate($tmpRequest, $activeValidRules);
