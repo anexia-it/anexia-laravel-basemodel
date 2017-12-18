@@ -18,12 +18,6 @@ use Illuminate\Support\Facades\Lang;
 interface BaseModelInterface
 {
     /**
-     * BaseModel constructor.
-     * @param array $attributes
-     */
-    public function __construct(array $attributes = []);
-
-    /**
      * Can be overwritten to support different auth
      *
      * @return Model|null
