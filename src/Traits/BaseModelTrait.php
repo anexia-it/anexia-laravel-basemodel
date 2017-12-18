@@ -3,6 +3,10 @@
 namespace Anexia\BaseModel\Traits;
 
 use Anexia\BaseModel\Interfaces\BaseModelInterface;
+use Anexia\Changeset\Changerecord;
+use Anexia\Changeset\Changeset;
+use Anexia\Changeset\Interfaces\ChangesetUserInterface;
+use Anexia\Changeset\ObjectType;
 use Anexia\LaravelEncryption\DatabaseEncryption;
 use App\Traits\DecryptionKeyFromAccessToken;
 use Illuminate\Database\Eloquent\Builder;
@@ -47,6 +51,157 @@ trait BaseModelTrait
     protected function getEncryptKey()
     {
         //
+    }
+
+    /**
+     * override to add special behaviour for encrypted models
+     */
+    protected static function bootChangesetTrackable()
+    {
+        static::created(function(Model $model) {
+            if (!empty($model->getEncryptedFields())) {
+                $model->newEncryptedCreationChangeset($model);
+            } else {
+                $model->newCreationChangeset($model);
+            }
+        });
+
+        static::updated(function(Model $model) {
+            if (!empty($model->getEncryptedFields())) {
+                $model->newEncryptedUpdateChangeset($model);
+            } else {
+                $model->newUpdateChangeset($model);
+            }
+        });
+
+        static::deleted(function(Model $model) {
+            $model->newDeletionChangeset($model);
+        });
+    }
+
+    /**
+     * Called after the encrypted model was successfully created (INSERTED into database)
+     *
+     * @param Model $model
+     */
+    public function newEncryptedCreationChangeset(Model $model)
+    {
+        $oTModel = new ObjectType();
+        $oTModel->setConnection($this->getChangesetConnection());
+        $objectType = $oTModel->firstOrCreate(['name' => get_class($model)]);
+
+        $currentUser = $this->getChangesetUser();
+        $userName = $currentUser instanceof ChangesetUserInterface ? $currentUser->getUserName() : 'unknown username';
+        $actionId = uniqid();
+        $changesetType = Changeset::CHANGESET_TYPE_INSERT;
+        $attributes = $model->attributes;
+
+        $changeset = new Changeset();
+        $changeset->setConnection($this->getChangesetConnection());
+        $changeset->action_id = $actionId;
+        $changeset->changeset_type = $changesetType;
+        $changeset->objectType()->associate($objectType);
+        $changeset->object_uuid = $model->id;
+        $changeset->user()->associate($currentUser);
+
+        $changeset->display = $this->changesetTypesMap[$changesetType] . ' ' . $objectType->name . ' ' . $model->id
+            . ' at date ' . date('Y-m-d H:i:s') . ' by ' . $userName;
+        $changeset->save();
+
+        $encryptedAttributes = $model->getEncryptedFields();
+        foreach ($attributes as $fieldName => $newValue) {
+            if (in_array($fieldName, $this->trackFields)) {
+                if (in_array($fieldName, $encryptedAttributes)) {
+                    $changerecord = new Changerecord();
+                    $changerecord->setConnection($this->getChangesetConnection());
+                    $changerecord->display = 'Set ' . $fieldName . ' (encrypted)';
+                    $changerecord->field_name = $fieldName;
+                    $changerecord->changeset()->associate($changeset);
+                    $changerecord->save();
+                } else {
+                    $newValue = !empty($newValue) ? $newValue : 'NULL';
+
+                    $changerecord = new Changerecord();
+                    $changerecord->setConnection($this->getChangesetConnection());
+                    $changerecord->display = 'Set ' . $fieldName . ' to ' . $newValue;
+                    $changerecord->field_name = $fieldName;
+                    $changerecord->new_value = $newValue;
+                    $changerecord->changeset()->associate($changeset);
+                    $changerecord->save();
+                }
+            }
+        }
+
+        if (!empty($model->trackRelated)) {
+            // only create one changeset per each object (collect them to avoid duplicates)
+            $handledChanges[$objectType->name][$model->id] = $changesetType;
+            $this->manageRelatedChangesets($model, $changeset, $actionId, $changesetType, $currentUser, $handledChanges);
+        }
+    }
+
+    /**
+     * Called after the encrypted model was successfully updated (UPDATED in database)
+     *
+     * @param Model $model
+     */
+    public function newEncryptedUpdateChangeset(Model $model)
+    {
+        $oTModel = new ObjectType();
+        $oTModel->setConnection($this->getChangesetConnection());
+        $objectType = $oTModel->firstOrCreate(['name' => get_class($model)]);
+
+        $currentUser = $this->getChangesetUser();
+        $userName = $currentUser instanceof ChangesetUserInterface ? $currentUser->getUserName() : 'unknown username';
+        $actionId = uniqid();
+        $changesetType = Changeset::CHANGESET_TYPE_UPDATE;
+        $attributes = $model->attributes;
+
+        $changeset = new Changeset();
+        $changeset->setConnection($this->getChangesetConnection());
+        $changeset->action_id = $actionId;
+        $changeset->changeset_type = $changesetType;
+        $changeset->objectType()->associate($objectType);
+        $changeset->object_uuid = $model->id;
+        $changeset->user()->associate($currentUser);
+
+        $changeset->display = $this->changesetTypesMap[$changesetType] . ' ' . $objectType->name . ' ' . $model->id
+            . ' at date ' . date('Y-m-d H:i:s') . ' by ' . $userName;
+        $changeset->save();
+
+        $encryptedAttributes = $model->getEncryptedFields();
+        foreach ($attributes as $fieldName => $newValue) {
+            if (in_array($fieldName, $this->trackFields)) {
+                if (in_array($fieldName, $encryptedAttributes)) {
+                    $changerecord = new Changerecord();
+                    $changerecord->setConnection($this->getChangesetConnection());
+                    $changerecord->display = 'Changed ' . $fieldName . ' (encrypted)';
+                    $changerecord->field_name = $fieldName;
+                    $changerecord->changeset()->associate($changeset);
+                    $changerecord->save();
+                } else {
+                    $oldValue = isset($model->original[$fieldName]) && !empty($model->original[$fieldName]) ? $model->original[$fieldName] : 'NULL';
+                    $newValue = !empty($newValue) ? $newValue : 'NULL';
+
+                    if ($newValue !== $oldValue) {
+                        $changerecord = new Changerecord();
+                        $changerecord->setConnection($this->getChangesetConnection());
+                        $changerecord->display = 'Changed ' . $fieldName . ' from ' . $oldValue . ' to ' . $newValue;
+                        $changerecord->field_name = $fieldName;
+                        $changerecord->new_value = $newValue;
+                        $changerecord->old_value = $oldValue;
+
+                        $changerecord->changeset()->associate($changeset);
+                        $changerecord->save();
+                    }
+                }
+            }
+        }
+
+        if (!empty($model->trackRelated)) {
+            // only create one changeset per each object (collect them to avoid duplicates)
+            $handledChanges[$objectType->name][$model->id] = $changesetType;
+            $this->manageRelatedChangesets($model, $changeset, $actionId, $changesetType, $currentUser, $handledChanges);
+        }
     }
 
     /**
@@ -422,7 +577,6 @@ trait BaseModelTrait
         // (->orderBy(field, direction))
         self::addSortings($query, $sortings, $decryptionKey);
 
-        var_dump($query->toSql());
         /**
          * pagination
          */
