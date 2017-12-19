@@ -2,7 +2,7 @@
 
 namespace Anexia\BaseModel\Traits;
 
-use App\Token;
+use Anexia\BaseModel\Token;
 use Lcobucci\JWT\Parser;
 
 trait DecryptionKeyFromAccessToken
