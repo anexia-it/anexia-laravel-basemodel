@@ -482,19 +482,45 @@ trait BaseModelTrait
     }
 
     /**
+     * @param array $columns
+     * @param string|null $decryptionKey
+     * @param array $preSetFilters
+     * @param array $preSetOrFilters
+     * @param array $preSetIncludes
+     * @param array $preSetSearches
+     * @param array $preSetOrSearches
+     * @return \Illuminate\Database\Eloquent\Collection|static[]
+     */
+    public static function allExtendedEncrypted($columns = ['*'], $decryptionKey = null, $preSetFilters = [],
+                                                $preSetOrFilters = [], $preSetIncludes = [], $preSetSearches = [],
+                                                $preSetOrSearches = [])
+    {
+        return self::allExtended(
+            $columns,
+            $preSetFilters,
+            $preSetOrFilters,
+            $preSetIncludes,
+            $preSetSearches,
+            $preSetOrSearches,
+            $decryptionKey
+        );
+    }
+
+    /**
      * Get all model objects (filtered, sorted, paginated, with their included relation objects) from the database.
      *
      * @param array $columns
-     * @param string|null $decryptionKey
      * @param array|mixed $preSetFilters
      * @param array|mixed $preSetOrFilters
      * @param array|mixed $preSetIncludes
      * @param array|mixed $preSetSearches
      * @param array|mixed $preSetOrSearches
+     * @param string|null $decryptionKey
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
-    public static function allExtended($columns = ['*'], $decryptionKey = null, $preSetFilters = [], $preSetOrFilters = [],
-                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = [])
+    public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [],
+                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = [],
+                                       $decryptionKey = null)
     {
         $request = request();
 
