@@ -8,7 +8,6 @@ use Anexia\Changeset\Changeset;
 use Anexia\Changeset\Interfaces\ChangesetUserInterface;
 use Anexia\Changeset\ObjectType;
 use Anexia\LaravelEncryption\DatabaseEncryption;
-use App\Traits\DecryptionKeyFromAccessToken;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\RelationNotFoundException;
