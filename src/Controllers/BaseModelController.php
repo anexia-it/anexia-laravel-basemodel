@@ -6,7 +6,7 @@ use Anexia\BaseModel\Interfaces\BaseModelInterface;
 use Anexia\BaseModel\Database\Connection;
 use Anexia\BaseModel\Exceptions\Query\SqlException;
 use Anexia\BaseModel\Exceptions\Validation\BulkValidationException;
-use App\Traits\DecryptionKeyFromAccessToken;
+use Anexia\BaseModel\Traits\DecryptionKeyFromAccessToken;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
