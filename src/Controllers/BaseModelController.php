@@ -29,6 +29,8 @@ class BaseModelController extends BaseController
 
     /** string */
     const EXPORT_TYPE_PDF = 'pdf';
+    /** string */
+    const EXPORT_TYPE_CSV = 'csv';
 
     /** string */
     const VIEW_TYPE_DOWNLOAD = 'download';
@@ -660,10 +662,40 @@ class BaseModelController extends BaseController
         $exportType = request()->exists('export_type') ? request()->input('export_type') : self::EXPORT_TYPE_PDF;
         $viewType = request()->exists('view_type') ? request()->input('view_type') : self::VIEW_TYPE_DOWNLOAD;
         $fileName = isset($config['file_name']) ? $config['file_name'] : $viewType;
-        switch ($exportType) {
+        switch (strtolower($exportType)) {
+            case self::EXPORT_TYPE_CSV:
+                $fileName .= '.csv';
+                /** @var string $output */
+                $output = $this->generateCsv($data, $config);
+
+                if ($viewType == self::VIEW_TYPE_VIEW) {
+                    return response()->make($output, 200, [
+                        'Content-Type' => 'text/csv',
+                        'Content-Disposition' => 'inline; filename="' . $fileName . '"'
+                    ]);
+                }
+
+                return response()->make($output, 200, [
+                    'Content-Description' => 'File Transfer',
+                    'Content-Transfer-Encoding' => 'binary',
+                    'Cache-Control' => 'public, must-revalidate, max-age=0',
+                    'Pragma' => 'public',
+                    'Last-Modified' => gmdate('D, d M Y H:i:s') . ' GMT',
+                    'Content-Type' => 'application/force-download',
+                    'Content-Type' => 'application/octet-stream',
+                    'Content-Type' => 'application/download',
+                    'Content-Type' => 'text/csv',
+                    'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+                    'Content-Length' => strlen($output)
+                ]);
+                break;
+            case self::EXPORT_TYPE_PDF:
+                // same behaviour as default
             default:
                 $fileName .= '.pdf';
+                /** @var \niklasravnsborg\LaravelPdf\Pdf $pdf */
                 $pdf = $this->generatePdf($data, $config, $mergeData);
+                /** @var string $output */
                 $output = $pdf->output($fileName);
 
                 if ($viewType == self::VIEW_TYPE_VIEW) {
@@ -713,7 +745,7 @@ class BaseModelController extends BaseController
             $exportColumn = request()->input('export_column');
             if (count($exportColumn) == 1 && !is_array($exportColumn)) {
                 // make sure that $columns is an array
-                $columns = [$exportColumn];
+                $columns = explode(',', $exportColumn);
             } else {
                 $columns = $exportColumn;
             }
@@ -734,5 +766,101 @@ class BaseModelController extends BaseController
             $config
         );
         return $pdf;
+    }
+
+    /**
+     * @param BaseModelInterface|BaseModelInterface[] $data
+     * @param array $config
+     * @return string
+     */
+    public function generateCsv($data, $config = [])
+    {
+        $csvString = '';
+        $model = isset($config['model']) ? $config['model'] : 'ExtendedModel';
+        $modelClass = isset($config['model_class']) ? $config['model_class'] : 'ExtendedModel';
+
+        // if no specific columns are selected for export, get them all
+        $columns = $modelClass::getDefaultExport();
+        if (request()->exists('export_column')) {
+            $exportColumn = request()->input('export_column', []);
+            if (count($exportColumn) == 1 && !is_array($exportColumn)) {
+                // make sure that $columns is an array
+                $columns = explode(',', $exportColumn);
+            } else {
+                $columns = $exportColumn;
+            }
+        }
+
+        if (!isset($config['default_font'])) {
+            $config['default_font'] = $this->pdfConfig['default_font'];
+        }
+
+        if (!isset($config['default_font_size'])) {
+            $config['default_font_size'] = $this->pdfConfig['default_font_size'];
+        }
+
+        if (!empty($columns)) {
+            $delimeter = isset($config['delimeter']) ? $config['delimeter'] : ',';
+
+            $headers = [];
+            $rows = [];
+            foreach ($data as $object) {
+                $rowData = [];
+                foreach ($columns as $name => $column) {
+                    if (is_int($name)) {
+                        if (strpos($column, '.') > (-1)) {
+                            $exploded = explode('.', $column);
+                            $relation = $exploded[0];
+                            $name = $relation;
+                            $value = $this->extractObjectAttribute($object, $column);
+                        } else {
+                            $name = $column;
+                            $value = $object->$column;
+                        }
+                    } else {
+                        $value = '';
+                        $parts = explode(' ', $column);
+                        foreach ($parts as $part) {
+                            $value .= $this->extractObjectAttribute($object, $part) . ' ';
+                        }
+
+                        $value = rtrim($value);
+                    }
+
+                    if (!isset($headers[$name])) {
+                        $headers[$name] = Lang::get($model . '.' . $name);
+                    }
+                    $rowData[$name] = $value;
+                }
+
+                $rows[] = implode($delimeter, $rowData);
+            }
+            $csvString .= implode($delimeter, $headers) . "\n";
+            $csvString .= implode("\n", $rows);
+        }
+
+        return $csvString;
+    }
+
+    /**
+     * @param $object
+     * @param string $attribute
+     * @return null|string
+     */
+    private function extractObjectAttribute($object, $attribute)
+    {
+        if (isset($object->$attribute)) {
+            return $object->$attribute;
+        } else if (strpos($attribute, '.') > (-1)) {
+            $exploded = explode('.', $attribute);
+            $relation = $exploded[0];
+            unset($exploded[0]);
+            $attribute = implode('.', $exploded);
+            if ($object->$relation) {
+                return $this->extractObjectAttribute($object->$relation, $attribute);
+            }
+        }
+
+        return null;
     }
 }

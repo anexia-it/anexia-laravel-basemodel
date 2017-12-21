@@ -27,6 +27,8 @@ trait BaseModelTrait
 
     /** @var int */
     protected static $pagination = 10;
+    /** @var int */
+    protected static $maxPagination = 1000;
 
     /**
      * BaseModel constructor.
@@ -264,6 +266,15 @@ trait BaseModelTrait
     }
 
     /**
+     * @return array
+     */
+    public static function getDefaultExport()
+    {
+        // return the default export columns in each model
+        return [];
+    }
+
+    /**
      * @param boolean|false $list
      * @param boolean|true $excludeUnmodifieable
      * @return array
@@ -489,11 +500,12 @@ trait BaseModelTrait
      * @param array $preSetIncludes
      * @param array $preSetSearches
      * @param array $preSetOrSearches
+     * @param int|string|null $preSetPagination
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
     public static function allExtendedEncrypted($columns = ['*'], $decryptionKey = null, $preSetFilters = [],
                                                 $preSetOrFilters = [], $preSetIncludes = [], $preSetSearches = [],
-                                                $preSetOrSearches = [])
+                                                $preSetOrSearches = [], $preSetPagination = '')
     {
         return self::allExtended(
             $columns,
@@ -502,6 +514,7 @@ trait BaseModelTrait
             $preSetIncludes,
             $preSetSearches,
             $preSetOrSearches,
+            $preSetPagination,
             $decryptionKey
         );
     }
@@ -515,12 +528,13 @@ trait BaseModelTrait
      * @param array|mixed $preSetIncludes
      * @param array|mixed $preSetSearches
      * @param array|mixed $preSetOrSearches
+     * @param int|string|null $preSetPagination
      * @param string|null $decryptionKey
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
     public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [],
                                        $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = [],
-                                       $decryptionKey = null)
+                                       $preSetPagination = '', $decryptionKey = null)
     {
         $request = request();
 
@@ -535,7 +549,8 @@ trait BaseModelTrait
         $sortings = $modelClass::getDefaultSorting();
         // use 1 as default page
         $page = 1;
-        $pagination = $modelClass::$pagination;
+
+        $pagination = $preSetPagination !== '' ? $preSetPagination : $modelClass::$pagination;
 
         $getParams = $request->query();
         self::extractFromParams(
@@ -605,6 +620,11 @@ trait BaseModelTrait
         /**
          * pagination
          */
+        if ($pagination === null) {
+            $pagination = 10000000;
+        }
+        // make sure pagination does not exceed the allowed maximum pagination
+        $pagination = min($pagination, $modelClass::$maxPagination);
         /** @var LengthAwarePaginator $lAPaginator */
         $lAPaginator = $query->paginate($pagination, $columns);
 
@@ -1431,11 +1451,12 @@ trait BaseModelTrait
      * @param array $columns
      * @param array $preSetFilters
      * @param array $preSetIncludes
+     * @param int|string|null $preSetPagination
      * @param string|null $decryptionKey
      * @return Model
      */
     public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = [],
-                                        $decryptionKey = null)
+                                        $preSetPagination = '', $decryptionKey = null)
     {
         $request = request();
 
@@ -1443,6 +1464,8 @@ trait BaseModelTrait
         $includes = $preSetIncludes;
         /** @var Model $modelClass */
         $modelClass = get_called_class();
+
+        $pagination = $preSetPagination !== '' ? $preSetPagination : $modelClass::$pagination;
 
         $getParams = $request->query();
         self::extractFromParams(
