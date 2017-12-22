@@ -752,6 +752,15 @@ select * from posts where (((name::TEXT ILIKE '%post%' and name::TEXT ILIKE 'blo
     or author_idvLIKE '%1%'))
 ```
 
+##### 4.3.1.1.7 $preSetPagination (seventh parameter)
+Integer or null to avoid the model's default pagination. Can not exceed the model's $maxPagination value (automatically
+reduced).
+
+##### 4.3.1.1.8 $decryptionKey (eighth parameter)
+String or null to use for the decryption of encrypted properties of a model that uses the anexia/encryption package.
+If the correct decryption key is given, the encrypted properties will automatically be decrypted and returned. If no
+decryption key is given, the encrypted properties will be excluded from the response.
+
 #### 4.3.2. Static method findExtended
 This method adds BaseModel features to the basic 'find' method of each eloquent model:
 ```
@@ -833,6 +842,17 @@ will result in the following SQL query:
 ```
 select * from posts where id = 1 and 
 ```
+
+##### 4.3.2.1.3 $preSetIncludes (fourth parameter)
+
+##### 4.3.2.1.4 $preSetPagination (fifth parameter)
+Integer or null to avoid the model's default pagination. Can not exceed the model's $maxPagination value (automatically
+reduced).
+
+##### 4.3.2.1.5 $decryptionKey (sixth parameter)
+String or null to use for the decryption of encrypted properties of a model that uses the anexia/encryption package.
+If the correct decryption key is given, the encrypted properties will automatically be decrypted and returned. If no
+decryption key is given, the encrypted properties will be excluded from the response.
 
 ### 4.4. Exceptions
 The BaseModel package comes with two built-in exception classes:
@@ -978,6 +998,65 @@ To allow several possible values for one filter, the OR constraint can be used b
 `GET /posts?name[]=test post&name[]=Another post` will only return the posts that have the name = 'test post' or name =
 'Another post'.
 
+##### 4.5.2.3 Prepared filters
+Some of the models come with prepared filter statements to support certain queries. The existing prepared filters are
+listed in each endpoint section. To call them, simply use the "prepared_filter" GET parameter
+
+**Example**
+Assuming, the post model has a filter "current_comments" defined:
+```
+/**
+ * @return array
+ */
+public static function getPreparedFilters()
+{
+    return [
+        'current_comments' => ['year' => 2017, 'type' => 'comment'],
+    ];
+}
+```
+
+`GET /posts?prepared_filter[]=current_comments` will only return the posts with type "comment" and property year=2017.
+
+Prepared filters can be combined just like any other filter:
+
+**Example**
+`GET /posts?prepared_filter[]=current_comments&name=post_name` will only return the posts with property year=2017 and name
+"post_name".
+
+**Note**
+The prepared filter "current_comments" gives the same output as a query for year=2017&type=comment would. Prepared
+filters only makes sense for queries with more filter values than one.
+
+#### Prepared complex filters
+Other than "simple" prepared filters, which merely represent a combination of straight forward AND / OR filters, a model
+can contain more complex filter structure, including joins or subqueries.
+
+**Example**
+Assuming, the post model has a filter "name_shorter_10" defined:
+```
+/**
+ * @return array
+ */
+public static function getPreparedComplexFilters()
+{
+    return [
+        'name_shorter_10' => [
+            'whereRaw' => ['LENGTH(name) < 10']
+        ],
+    ];
+}
+```
+
+`GET /api/v1/bricks?prepared_filter[]=name_shorter_10` will only return all posts with a name shorter than 10
+characters.
+
+Prepared complex filters can be combined just like any other filter:
+
+**Example**
+`GET /api/v1/bricks?prepared_filter[]=name_shorter_10&year=2017` only return all posts with a name shorter than 10
+characters and the property year=2017.
+
 #### 4.5.3. Searching
 To trigger a case insensitive 'LIKE' sql search (case insensitive LIKE), the 'search' GET parameter can be used.
 By default the model properties defined in the 'getDefaultSearch' method will be searched if no explicit property name
@@ -1092,7 +1171,6 @@ a valid response with an empty collection of items ('data').
 `GET /posts?pagination=100&page=2` will return all posts with ((name 
 LIKE '%test%' OR type LIKE '%test%' OR name LIKE '%foo%' OR type LIKE '%foo%') AND type LIKE '%foo' AND name LIKE
 'bar%').
-
 
 ## 5. Testing
 The package comes with a basic test class for BaseModels and a more general DbTestCase that uses DatabaseTransactions
@@ -1218,3 +1296,4 @@ created from scratch (using the commands 'php artisan migrate' and 'php artisan 
 ## 7. Project related external resources
 
 * [Laravel 5 documentation](https://laravel.com/docs/5.4/installation)
+* [anexia/encryption documentation](https://gitlab.anx.local/anexia-developme/anexia-laravel-encryption)

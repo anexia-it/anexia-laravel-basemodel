@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Facades\Auth;
@@ -271,6 +272,24 @@ trait BaseModelTrait
     public static function getDefaultExport()
     {
         // return the default export columns in each model
+        return [];
+    }
+
+    /**
+     * @return array
+     */
+    public static function getPreparedFilters()
+    {
+        // return the specially prepared filters in each model
+        return [];
+    }
+
+    /**
+     * @return array
+     */
+    public static function getPreparedComplexFilters()
+    {
+        // return the specially prepared complex filters (adapting the query builder) in each model
         return [];
     }
 
@@ -564,7 +583,8 @@ trait BaseModelTrait
             $orFilters,
             $searches,
             $orSearches,
-            $notEmptyFilters
+            $notEmptyFilters,
+            $complexFilters
         );
 
         /**
@@ -585,6 +605,9 @@ trait BaseModelTrait
         /**
          * filtering
          */
+        if (!empty($complexFilters)) {
+            self::addComplexFilters($query, $complexFilters);
+        }
         $query->where(function (Builder $q) use ($filters, $orFilters, $notEmptyFilters, $decryptionKey) {
             // add not empty and not null filters
             // (->whereNotNull('field')->where('field', '<>', ''))
@@ -652,10 +675,12 @@ trait BaseModelTrait
      * @param array $searches
      * @param array $orSearches
      * @param array $notEmptyFilters
+     * @param array $complexFilters
      */
     private static function extractFromParams($params, $modelClass, &$page = 1,
                                               &$pagination = 10, &$includes = [], &$sortings = [], &$filters = [],
-                                              &$orFilters = [], &$searches = [], &$orSearches = [], &$notEmptyFilters = [])
+                                              &$orFilters = [], &$searches = [], &$orSearches = [],
+                                              &$notEmptyFilters = [], &$complexFilters = [])
     {
         if (!empty($params)) {
             /** @var BaseModelInterface $instance */
@@ -857,6 +882,49 @@ trait BaseModelTrait
             }
 
             /**
+             * set preparedFilters
+             */
+            $preparedFilters = $modelClass::getPreparedFilters();
+            if (isset($params['prepared_filter']) && !empty($preparedFilters)) {
+                if (!is_array($params['prepared_filter'])) {
+                    $requestedFilters = [$params['prepared_filter']];
+                } else {
+                    $requestedFilters = $params['prepared_filter'];
+                }
+
+                foreach ($requestedFilters as $requestedFilter) {
+                    if (isset($preparedFilters[$requestedFilter])) {
+                        $prepFilter = $preparedFilters[$requestedFilter];
+                        foreach ($prepFilter as $partName => $partValue) {
+                            if (is_int($partName)) {
+                                $notEmptyFilters[$partValue] = $partValue;
+                            } else {
+                                $filters[$partName] = $partValue;
+                            }
+                        }
+                    }
+                }
+            }
+
+            /**
+             * set complexFilters
+             */
+            $prepComplexFilters = $modelClass::getPreparedComplexFilters();
+            if (isset($params['prepared_filter']) && !empty($prepComplexFilters)) {
+                if (!is_array($params['prepared_filter'])) {
+                    $requestedFilters = [$params['prepared_filter']];
+                } else {
+                    $requestedFilters = $params['prepared_filter'];
+                }
+
+                foreach ($requestedFilters as $requestedFilter) {
+                    if (isset($prepComplexFilters[$requestedFilter])) {
+                        $complexFilters[$requestedFilter] = $prepComplexFilters[$requestedFilter];
+                    }
+                }
+            }
+
+            /**
              * set other filters
              */
             foreach ($attributes as $attribute) {
@@ -904,13 +972,32 @@ trait BaseModelTrait
                         $relation = $scopes[0];
                         unset($scopes[0]);
                         $relAttribute = array_values($scopes);
-                        self::filterRelation($q, $relation, $relAttribute, '', true);
+                        self::filterRelation($q, $relation, $relAttribute, null, true);
                     } else {
                         $q->whereNotNull($attribute);
-                        $q->where($attribute, '<>', '');
+                        $q->where($attribute, '<>', null);
                     }
                 }
             });
+        }
+    }
+
+    /**
+     * add prepared filter function (defined in each model) to the eloquent query builder
+     *
+     * @param Builder $query
+     * @param array $complexFilters
+     */
+    public static function addComplexFilters(Builder &$query, $complexFilters = [])
+    {
+        foreach ($complexFilters as $filterName => $complexFilter) {
+            foreach ($complexFilter as $command => $filterParams) {
+                if (is_array($filterParams)) {
+                    $query = call_user_func_array([$query, $command], $filterParams);
+                } else {
+                    $query->$command($filterParams);
+                }
+            }
         }
     }
 
