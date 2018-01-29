@@ -490,7 +490,9 @@ class BaseModelController extends BaseController
         if (isset($relationValues['id'])) {
             $relatedObject = $object->getRelatedObject($relation, $relationValues['id'], $assign);
 
-            if ($object::isEditableRelationship($object, $relation, $relatedObject, $relationValues)) {
+            if ($relatedObject instanceof Model
+                && $object::isEditableRelationship($object, $relation, $relatedObject, $relationValues)
+            ) {
                 $edit = true;
             }
         }

@@ -1620,7 +1620,7 @@ trait BaseModelTrait
      */
     public function clearRelation($relation = '')
     {
-        if (count($this->$relation()) > 0) {
+        if (isset($this->$relation) && count($this->$relation) > 0) {
             // "dissociate" all models related via $relation
             switch (get_class($this->$relation())) {
                 case HasOne::class:
