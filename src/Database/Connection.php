@@ -27,12 +27,12 @@ class Connection extends BaseConnection
         return $this->transCount >= 0;
     }
 
-    public function rollback()
+    public function rollBack($toLevel = null)
     {
         if (--$this->transCount) {
             $this->getPdo()->exec('ROLLBACK TO trans' . ($this->transCount + 1));
             return true;
         }
-        return parent::rollback();
+        return parent::rollBack($toLevel);
     }
 }
