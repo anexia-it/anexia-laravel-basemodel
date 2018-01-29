@@ -1620,20 +1620,20 @@ trait BaseModelTrait
      */
     public function clearRelation($relation = '')
     {
-        if (isset($this->$relation) && count($this->$relation) > 0) {
-            // "dissociate" all models related via $relation
-            switch (get_class($this->$relation())) {
-                case HasOne::class:
-                    $this->$relation()->delete();
+        // "dissociate" all models related via $relation
+        switch (get_class($this->$relation())) {
+            case HasOne::class:
+                $this->$relation()->delete();
 
-                    break;
+                break;
 
-                case BelongsTo::class:
-                    $this->$relation()->dissociate();
+            case BelongsTo::class:
+                $this->$relation()->dissociate();
 
-                    break;
+                break;
 
-                case HasMany::class:
+            case HasMany::class:
+                if (count($this->$relation) > 0) {
                     $inverse = $this::getRelationships()['many'][$relation]['inverse'];
 
                     foreach ($this->$relation as $key => $relatedObject) {
@@ -1644,30 +1644,32 @@ trait BaseModelTrait
 
                     // renew the $relation Collection's index-keys
                     $this->refresh();
+                }
 
-                    break;
+                break;
 
-                case BelongsToMany::class:
+            case BelongsToMany::class:
+                if (count($this->$relation) > 0) {
                     foreach ($this->$relation as $key => $relatedObject) {
                         $this->$relation()->detach($relatedObject->id);
                     }
 
                     // renew the $relation Collection's index-keys
                     $this->refresh();
+                }
 
-                    break;
+                break;
 
-                default:
-                    throw new \Exception(Lang::get(
-                        'extended_model.invalid_relation_type',
-                        ['relationType' => get_class($this->$relation())]
-                    ));
+            default:
+                throw new \Exception(Lang::get(
+                    'extended_model.invalid_relation_type',
+                    ['relationType' => get_class($this->$relation())]
+                ));
 
-                    break;
-            }
-
-            $this->save();
+                break;
         }
+
+        $this->save();
     }
 
     /**
