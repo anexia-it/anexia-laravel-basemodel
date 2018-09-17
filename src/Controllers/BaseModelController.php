@@ -57,8 +57,8 @@ class BaseModelController extends BaseController
      * @throws BulkValidationException
      */
     protected function editObjectContents(BaseModelInterface &$object, $requestParams = [], $checkCompletion = true,
-                                          $manageTransaction = true, &$relationsToLoad = [],
-                                          $callingParentRelationship = [])
+        $manageTransaction = true, &$relationsToLoad = [],
+        $callingParentRelationship = [])
     {
         /** @var array $errorMessages */
         $errorMessages = [];
@@ -232,7 +232,7 @@ class BaseModelController extends BaseController
      * @param array $callingParentRelationship
      */
     private function manageRequiredRelations(BaseModelInterface &$object, $requestParams = [], &$errorMessages,
-                                             &$relationsToLoad, $callingParentRelationship = [])
+        &$relationsToLoad, $callingParentRelationship = [])
     {
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
@@ -306,7 +306,7 @@ class BaseModelController extends BaseController
      * @param array $callingParentRelationship
      */
     private function manageOptionalRelations(BaseModelInterface &$object, $requestParams = [], &$errorMessages,
-                                             &$relationsToLoad, $callingParentRelationship = [])
+        &$relationsToLoad, $callingParentRelationship = [])
     {
         /** @var array $relationships - all possible relations of the $object */
         $relationships = $object::getAllRelationships();
@@ -476,8 +476,8 @@ class BaseModelController extends BaseController
      * @param array $relationsToLoad
      */
     protected function recursivelyManageRelation(BaseModelInterface &$object, &$errorMessages, $relation = '',
-                                                 $relationship = [], $relationValues = [], &$managedRelationIds = [],
-                                                 &$relationsToLoad = [])
+        $relationship = [], $relationValues = [], &$managedRelationIds = [],
+        &$relationsToLoad = [])
     {
         $edit = false;
         $checkCompletion = false;
@@ -864,5 +864,279 @@ class BaseModelController extends BaseController
         }
 
         return null;
+    }
+
+    /**
+     * @param array  $params
+     * @param string $searchKey
+     * @param bool   $prefix
+     * @param bool   $postfix
+     * @param array  $searches
+     * @param array  $defaultSearch
+     * @return array
+     */
+    private function extractSearchParameters($params, $searchKey, $prefix, $postfix, $searches, $defaultSearch)
+    {
+        if (isset($params[$searchKey])) {
+            $searchFields = $defaultSearch;
+            if (is_array($params[$searchKey])) {
+                $defaultValues = [];
+                foreach ($params[$searchKey] as $key => $values) {
+                    $isInt = is_int($key);
+                    if (is_array($values)) {
+                        if ($isInt) {
+                            $defaultValues = array_merge($defaultValues, $values);
+                        } else {
+                            foreach ($values as $value) {
+                                $searches[$key][] = ($prefix ? '%' : '') . $value . ($postfix ? '%' : '');
+                            }
+                        }
+                    } elseif ($isInt) {
+                        $defaultValues[] = $values;
+                    } else {
+                        $searches[$key][] = ($prefix ? '%' : '') . $values . ($postfix ? '%' : '');
+                    }
+                }
+                $search = [];
+                foreach ($searchFields as $searchField) {
+                    foreach ($defaultValues as $values) {
+                        $search[$searchField][] = ($prefix ? '%' : '') . $values . ($postfix ? '%' : '');
+                    }
+                }
+                if (!empty($search)) {
+                    $searches[] = $search;
+                }
+            } else {
+                $search = [];
+                foreach ($searchFields as $searchField) {
+                    $search[$searchField][] = ($prefix ? '%' : '') . $params[$searchKey] . ($postfix ? '%' : '');
+                }
+                if (!empty($search)) {
+                    $searches[] = $search;
+                }
+            }
+            unset($params[$searchKey]);
+        }
+
+        return $searches;
+    }
+
+    /**
+     * read the params from the request and divide them into logical information packages
+     *
+     * @param \Anexia\BaseModel\ExtendedModelParameters|BaseModelInterface|string|null $extendedParameters
+     * @return \Anexia\BaseModel\ExtendedModelParameters
+     */
+    public function getExtendedModelParameters($extendedParameters = null)
+    {
+        /* @var $modelClass BaseModelInterface */
+        $modelClass = get_called_class();
+
+        if ($extendedParameters === null) {
+            $extendedParameters = new \Anexia\BaseModel\ExtendedModelParameters();
+            $extendedParameters->setModelClass($modelClass);
+        } elseif ($extendedParameters instanceof BaseModelInterface) {
+            $modelClass = $extendedParameters;
+            $extendedParameters = new \Anexia\BaseModel\ExtendedModelParameters();
+            $extendedParameters->setModelClass($modelClass);
+        } elseif (is_string($extendedParameters)) {
+            $modelClass = $extendedParameters;
+            $extendedParameters = new \Anexia\BaseModel\ExtendedModelParameters();
+            $extendedParameters->setModelClass($modelClass);
+        } else {
+            $modelClass = $extendedParameters->getModelClass();
+        }
+
+        $params = request()->query();
+        if (empty($params)) {
+            return $extendedParameters;
+        }
+
+        /** @var BaseModelInterface $instance */
+        $instance = $modelClass instanceof BaseModelInterface ? $modelClass : new $modelClass;
+        $attributes = $instance->getAllAttributes();
+
+        /**
+         * set pagination variables
+         */
+        if (isset($params['page'])) {
+            if (!empty($params['page'])) {
+                $extendedParameters->setPage($params['page']);
+            }
+            unset($params['page']);
+        }
+        if (isset($params['pagination'])) {
+            if (!empty($params['pagination'])) {
+                $extendedParameters->setPagination($params['pagination']);
+            }
+            unset($params['pagination']);
+        }
+
+        /**
+         * set includes
+         */
+        if (isset($params['include'])) {
+            $extendedParameters->setIncludes(
+                array_unique(array_merge($extendedParameters->getIncludes(), $params['include']))
+            );
+            unset($params['include']);
+        }
+
+        /**
+         * set sorting
+         */
+        // if default_sorting is turned off, empty the $sortings array now
+        if (isset($params['default_sorting']) && !filter_var($params['default_sorting'], FILTER_VALIDATE_BOOLEAN)) {
+            $extendedParameters->setSortings([]);
+            unset($params['default_sorting']);
+        }
+
+        // if the given sort_field entries are properties of the entity model, use them for orderBy
+        $hasSortDirections = isset($params['sort_direction']);
+        if ($hasSortDirections || isset($params['sort_field'])) {
+            $sortings = $extendedParameters->getSortings();
+            $sortFields = isset($params['sort_field']) ? $params['sort_field'] : [];
+
+            if ($hasSortDirections) {
+                $sortFields = array_unique(array_merge($sortFields, array_keys($params['sort_direction'])));
+            }
+
+            foreach ($sortFields as $key => $sortField) {
+                if ($sortField === $instance->getKeyName() || in_array(strtolower($sortField), $attributes, false)) {
+                    $direction = (isset($params['sort_direction'][$sortField])
+                        && in_array(strtoupper($params['sort_direction'][$sortField]), ['ASC', 'DESC']))
+                        ? strtoupper($params['sort_direction'][$sortField]) : 'ASC';
+                    if (!isset($sortings[$sortField])) {
+                        $sortings[$sortField] = $direction;
+                    }
+                }
+            }
+
+            $extendedParameters->setSortings($sortings);
+            unset($params['sort_field'], $params['sort_direction']);
+        }
+
+        /**
+         * set search filters
+         */
+        // LIKE '%value%'
+        $extendedParameters->setSearches(
+            $this->extractSearchParameters(
+                $params,
+                'search',
+                true,
+                true,
+                $extendedParameters->getSearches(),
+                $instance::getDefaultSearch()
+            )
+        );
+        unset($params['search']);
+
+        // LIKE 'value%'
+        $extendedParameters->setSearches(
+            $this->extractSearchParameters(
+                $params,
+                'search_start',
+                false,
+                true,
+                $extendedParameters->getSearches(),
+                $instance::getDefaultSearch()
+            )
+        );
+        unset($params['search_start']);
+
+        // LIKE '%value'
+        $extendedParameters->setSearches(
+            $this->extractSearchParameters(
+                $params,
+                'search_end',
+                true,
+                false,
+                $extendedParameters->getSearches(),
+                $instance::getDefaultSearch()
+            )
+        );
+        unset($params['search_end']);
+
+        /**
+         * set preparedFilters
+         */
+        $preparedFilters = $modelClass::getPreparedFilters();
+        if (!empty($preparedFilters) && isset($params['prepared_filter'])) {
+            $notEmptyFilters = $extendedParameters->getNotEmptyFilters();
+            $filters = $extendedParameters->getFilters();
+            if (!is_array($params['prepared_filter'])) {
+                $requestedFilters = [$params['prepared_filter']];
+            } else {
+                $requestedFilters = $params['prepared_filter'];
+            }
+
+            foreach ($requestedFilters as $requestedFilter) {
+                if (isset($preparedFilters[$requestedFilter])) {
+                    $prepFilter = $preparedFilters[$requestedFilter];
+                    foreach ($prepFilter as $partName => $partValue) {
+                        if (is_int($partName)) {
+                            $notEmptyFilters[$partValue] = $partValue;
+                        } else {
+                            $filters[$partName] = $partValue;
+                        }
+                    }
+                }
+            }
+            $extendedParameters->setNotEmptyFilters($notEmptyFilters);
+            $extendedParameters->setFilters($filters);
+        }
+
+        /**
+         * set complexFilters
+         */
+        $prepComplexFilters = $modelClass::getPreparedComplexFilters();
+        if (!empty($prepComplexFilters) && isset($params['prepared_filter'])) {
+            $complexFilters = $extendedParameters->getComplexFilters();
+            if (!is_array($params['prepared_filter'])) {
+                $requestedFilters = [$params['prepared_filter']];
+            } else {
+                $requestedFilters = $params['prepared_filter'];
+            }
+
+            foreach ($requestedFilters as $requestedFilter) {
+                if (isset($prepComplexFilters[$requestedFilter])) {
+                    $complexFilters[$requestedFilter] = $prepComplexFilters[$requestedFilter];
+                }
+            }
+            $extendedParameters->setComplexFilters($complexFilters);
+        }
+
+        /**
+         * set other filters
+         */
+        foreach ($attributes as $attribute) {
+            $filters = $extendedParameters->getFilters();
+            if (array_key_exists($attribute, $params)) {
+                $filters[$attribute] = $params[$attribute];
+                unset($params[$attribute]);
+            }
+            $extendedParameters->setFilters($filters);
+        }
+
+        /**
+         * set not empty filters
+         */
+        if (isset($params['not_empty'])) {
+            $notEmptyFilters = $extendedParameters->getNotEmptyFilters();
+            if (is_array($params['not_empty'])) {
+                foreach ($attributes as $attribute) {
+                    if (in_array($attribute, $params['not_empty'], false)) {
+                        $notEmptyFilters[$attribute] = $attribute;
+                    }
+                }
+            } else {
+                $notEmptyFilters[$params['not_empty']] = $params['not_empty'];
+            }
+            $extendedParameters->setNotEmptyFilters($notEmptyFilters);
+            unset($params['not_empty']);
+        }
+
+        return $extendedParameters;
     }
 }

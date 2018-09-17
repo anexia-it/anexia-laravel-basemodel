@@ -4,6 +4,7 @@
     "version": "1.0.0",
     "license": "MIT",
     "require": {
+        "php": ">=5.6.4",
         "anexia/laravel-encryption": "dev-master"
     },
     "repositories": [

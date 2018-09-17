@@ -2,6 +2,7 @@
 
 namespace Anexia\BaseModel\Traits;
 
+use Anexia\BaseModel\ExtendedModelParameters;
 use Anexia\BaseModel\Interfaces\BaseModelInterface;
 use Anexia\Changeset\Changerecord;
 use Anexia\Changeset\Changeset;
@@ -233,7 +234,7 @@ trait BaseModelTrait
     /**
      * @return array
      */
-    public function getUnmodifieable()
+    public function getUnmodifiable()
     {
         // return attributes that can not be changed during create/put/patch in each model
         return [];
@@ -295,10 +296,10 @@ trait BaseModelTrait
 
     /**
      * @param boolean|false $list
-     * @param boolean|true $excludeUnmodifieable
+     * @param boolean|true $excludeUnmodifiable
      * @return array
      */
-    public static function getAllRelationships($list = false, $excludeUnmodifieable = true)
+    public static function getAllRelationships($list = false, $excludeUnmodifiable = true)
     {
         /** @var BaseModelInterface $modelClass */
         $modelClass = get_called_class();
@@ -307,15 +308,15 @@ trait BaseModelTrait
         $instance = new $modelClass();
         $relationships = $instance::getRelationships($list);
 
-        if (!empty($relationships) && $excludeUnmodifieable) {
-            $unmodifieable = $instance->getUnmodifieable();
+        if (!empty($relationships) && $excludeUnmodifiable) {
+            $unmodifiable = $instance->getUnmodifiable();
             if ($list) {
-                $relationships = array_diff($relationships, $unmodifieable);
-            } else if (!empty($unmodifieable)) {
+                $relationships = array_diff($relationships, $unmodifiable);
+            } else if (!empty($unmodifiable)) {
                 $tmpCopy = $relationships;
                 foreach ($tmpCopy as $type => $relationship) {
                     foreach ($relationship as $relation => $config) {
-                        if (in_array($relation, $unmodifieable)) {
+                        if (in_array($relation, $unmodifiable)) {
                             unset($relationships[$type][$relation]);
                             if (empty($relationships[$type])) {
                                 unset($relationships[$type]);
@@ -392,7 +393,7 @@ trait BaseModelTrait
      * @return bool
      */
     public static function isEditableRelationship(BaseModelInterface $object, $relation, Model $relatedObject = null,
-                                                  $values = [])
+        $values = [])
     {
         $relationship = null;
         $relationships = $object::getAllRelationships();
@@ -489,10 +490,10 @@ trait BaseModelTrait
     }
 
     /**
-     * @param bool|true $excludeUnmodifieable
+     * @param bool|true $excludeUnmodifiable
      * @return array
      */
-    public function getAllAttributes($excludeUnmodifieable = true)
+    public function getAllAttributes($excludeUnmodifiable = true)
     {
         /** @var BaseModelInterface $modelClass */
         $modelClass = get_called_class();
@@ -503,100 +504,53 @@ trait BaseModelTrait
         $guarded = $instance->getGuarded();
         $attributes = array_merge($fillables, $guarded);
 
-        if ($excludeUnmodifieable) {
-            $unmodifieable = $instance->getUnmodifieable();
-            $attributes = array_diff($attributes, $unmodifieable);
+        if ($excludeUnmodifiable) {
+            $unmodifiable = $instance->getUnmodifiable();
+            $attributes = array_diff($attributes, $unmodifiable);
         }
 
         return $attributes;
     }
 
     /**
-     * @param array $columns
-     * @param string|null $decryptionKey
-     * @param array $preSetFilters
-     * @param array $preSetOrFilters
-     * @param array $preSetIncludes
-     * @param array $preSetSearches
-     * @param array $preSetOrSearches
-     * @param int|string|null $preSetPagination
+     * @param ExtendedModelParameters|null $extendedParameters
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
-    public static function allExtendedEncrypted($columns = ['*'], $decryptionKey = null, $preSetFilters = [],
-                                                $preSetOrFilters = [], $preSetIncludes = [], $preSetSearches = [],
-                                                $preSetOrSearches = [], $preSetPagination = '')
+    public static function allExtendedEncrypted($extendedParameters = null)
     {
-        return self::allExtended(
-            $columns,
-            $preSetFilters,
-            $preSetOrFilters,
-            $preSetIncludes,
-            $preSetSearches,
-            $preSetOrSearches,
-            $preSetPagination,
-            $decryptionKey
-        );
+        return self::allExtended($extendedParameters);
     }
 
     /**
      * Get all model objects (filtered, sorted, paginated, with their included relation objects) from the database.
      *
-     * @param array $columns
-     * @param array|mixed $preSetFilters
-     * @param array|mixed $preSetOrFilters
-     * @param array|mixed $preSetIncludes
-     * @param array|mixed $preSetSearches
-     * @param array|mixed $preSetOrSearches
-     * @param int|string|null $preSetPagination
-     * @param string|null $decryptionKey
+     * @param ExtendedModelParameters|null $extendedParameters
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
-    public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [],
-                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = [],
-                                       $preSetPagination = '', $decryptionKey = null)
+    public static function allExtended($extendedParameters = null)
     {
-        $request = request();
-
-        $filters = $preSetFilters;
-        $orFilters = $preSetOrFilters;
-        $includes = $preSetIncludes;
-        $searches = $preSetSearches;
-        $orSearches = $preSetOrSearches;
-
-        /** @var BaseModelInterface $modelClass */
+        /* @var $modelClass BaseModelInterface */
         $modelClass = get_called_class();
-        $sortings = $modelClass::getDefaultSorting();
-        // use 1 as default page
-        $page = 1;
-
-        $pagination = $preSetPagination !== '' ? $preSetPagination : $modelClass::$pagination;
-
-        $getParams = $request->query();
-        self::extractFromParams(
-            $getParams,
-            $modelClass,
-            $page,
-            $pagination,
-            $includes,
-            $sortings,
-            $filters,
-            $orFilters,
-            $searches,
-            $orSearches,
-            $notEmptyFilters,
-            $complexFilters
-        );
+        if ($extendedParameters === null) {
+            $extendedParameters = new ExtendedModelParameters();
+            $extendedParameters->setModelClass($modelClass);
+            $extendedParameters->setSortings($modelClass::getDefaultSorting());
+        } elseif ($extendedParameters->getModelClass() !== null) {
+            $modelClass = $extendedParameters->getModelClass();
+        } else {
+            $extendedParameters->setModelClass($modelClass);
+        }
 
         /**
          * set pagination
          */
-        Paginator::currentPageResolver(function () use ($page) {
-            return $page;
+        Paginator::currentPageResolver(function () use ($extendedParameters) {
+            return $extendedParameters->getPage();
         });
 
-        if ($decryptionKey) {
+        if ($extendedParameters->getDecryptionKey()) {
             /** @var Builder $query */
-            $query = $modelClass::withDecryptKey($decryptionKey);
+            $query = $modelClass::withDecryptKey($extendedParameters->getDecryptionKey());
         } else {
             /** @var Builder $query */
             $query = $modelClass::query();
@@ -605,32 +559,32 @@ trait BaseModelTrait
         /**
          * filtering
          */
-        if (!empty($complexFilters)) {
-            self::addComplexFilters($query, $complexFilters);
+        if (!empty($extendedParameters->getComplexFilters())) {
+            self::addComplexFilters($query, $extendedParameters->getComplexFilters());
         }
-        $query->where(function (Builder $q) use ($filters, $orFilters, $notEmptyFilters, $decryptionKey) {
+        $query->where(function (Builder $q) use ($extendedParameters) {
             // add not empty and not null filters
             // (->whereNotNull('field')->where('field', '<>', ''))
-            self::addNotEmptyFilters($q, $notEmptyFilters);
+            self::addNotEmptyFilters($q, $extendedParameters->getNotEmptyFilters());
 
             // add filters
             // (->where('field', 'attribute'))
-            self::addFilters($q, $filters, $decryptionKey);
+            self::addFilters($q, $extendedParameters->getFilters(), $extendedParameters->getDecryptionKey());
 
             // add OR filters
             // (->orWhere('field', 'attribute1')->orWhere('field', 'attribute2'))
 
-            self::addOrFilters($q, $orFilters, $decryptionKey);
+            self::addOrFilters($q, $extendedParameters->getOrFilters(), $extendedParameters->getDecryptionKey());
         });
 
-        $query->where(function (Builder $q) use ($searches, $orSearches, $decryptionKey) {
+        $query->where(function (Builder $q) use ($extendedParameters) {
             // add LIKE filters
             // (->where('field', 'LIKE', '%attribute%'))
-            self::addSearches($q, $searches, $decryptionKey);
+            self::addSearches($q, $extendedParameters->getSearches(), $extendedParameters->getDecryptionKey());
 
             // add OR LIKE filters
             // (->orWhere('field', 'LIKE', '%attribute1%')->orWhere('field', 'LIKE', '%attribute2%'))
-            self::addOrSearches($q, $orSearches, $decryptionKey);
+            self::addOrSearches($q, $extendedParameters->getOrSearches(), $extendedParameters->getDecryptionKey());
         });
 
         /**
@@ -638,318 +592,25 @@ trait BaseModelTrait
          */
         // add sorting
         // (->orderBy(field, direction))
-        self::addSortings($query, $sortings, $decryptionKey);
+        self::addSortings($query, $extendedParameters->getSortings(), $extendedParameters->getDecryptionKey());
 
         /**
          * pagination
          */
-        if ($pagination === null) {
-            $pagination = 10000000;
-        }
-        // make sure pagination does not exceed the allowed maximum pagination
-        $pagination = min($pagination, $modelClass::$maxPagination);
         /** @var LengthAwarePaginator $lAPaginator */
-        $lAPaginator = $query->paginate($pagination, $columns);
+        $lAPaginator = $query->paginate(
+            min($extendedParameters->getPagination(), $modelClass::$maxPagination),
+            $extendedParameters->getColumns()
+        );
 
         /**
          * inclusion
          */
         // include relations over multiple levels
         // (->load('relation'))
-        self::addIncludes($lAPaginator, $includes);
+        self::addIncludes($lAPaginator, $extendedParameters->getIncludes());
 
         return $lAPaginator;
-    }
-
-    /**
-     * read the params from the request and divide them into logical information packages
-     *
-     * @param array $params
-     * @param string $modelClass
-     * @param int $page; 1 by default
-     * @param int $pagination; 10 by default
-     * @param array $includes
-     * @param array $sortings
-     * @param array $filters
-     * @param array $orFilters
-     * @param array $searches
-     * @param array $orSearches
-     * @param array $notEmptyFilters
-     * @param array $complexFilters
-     */
-    private static function extractFromParams($params, $modelClass, &$page = 1,
-                                              &$pagination = 10, &$includes = [], &$sortings = [], &$filters = [],
-                                              &$orFilters = [], &$searches = [], &$orSearches = [],
-                                              &$notEmptyFilters = [], &$complexFilters = [])
-    {
-        if (!empty($params)) {
-            /** @var BaseModelInterface $instance */
-            $instance = new $modelClass;
-            $attributes = $instance->getAllAttributes();
-
-            /**
-             * set pagination variables
-             */
-            if (isset($params['page'])) {
-                if (!empty($params['page'])) {
-                    $page = $params['page'];
-                }
-                unset($params['page']);
-            }
-            if (isset($params['pagination'])) {
-                if (!empty($params['pagination'])) {
-                    $pagination = $params['pagination'];
-                }
-                unset($params['pagination']);
-            }
-
-            /**
-             * set includes
-             */
-            if (isset($params['include'])) {
-                $includes = array_merge($includes, $params['include']);
-                $includes = array_unique($includes);
-                unset($params['include']);
-            }
-
-            /**
-             * set sorting
-             */
-            // if default_sorting is turned off, empty the $sortings array now
-            if (isset($params['default_sorting'])
-                && ($params['default_sorting'] == false || strtolower($params['default_sorting']) == 'false')
-            ) {
-                $sortings = [];
-                unset($params['default_sorting']);
-            }
-
-            // if the given sort_field entries are properties of the entity model, use them for orderBy
-            if (isset($params['sort_field']) || isset($params['sort_direction'])) {
-                $sortFields = isset($params['sort_field']) ? $params['sort_field'] : [];
-
-                if (isset($params['sort_direction'])) {
-                    $sortFields = array_unique(array_merge($sortFields, array_keys($params['sort_direction'])));
-                }
-
-                foreach ($sortFields as $key => $sortField) {
-                    if (in_array(strtolower($sortField), $attributes)
-                        || $sortField == $instance->getKeyName()
-                    ) {
-                        $direction = (isset($params['sort_direction'][$sortField])
-                            && in_array(strtoupper($params['sort_direction'][$sortField]), ['ASC', 'DESC']))
-                            ? strtoupper($params['sort_direction'][$sortField]) : 'ASC';
-                        if (!isset($sortings[$sortField])) {
-                            $sortings[$sortField] = $direction;
-                        }
-                    }
-                }
-
-                unset($params['sort_field']);
-                unset($params['sort_direction']);
-            }
-
-            /**
-             * set search filters
-             */
-            // LIKE '%value%'
-            if (isset($params['search'])) {
-                $searchFields = $instance::getDefaultSearch();
-                if (is_array($params['search'])) {
-                    $defaultValues = [];
-                    foreach ($params['search'] as $key => $values) {
-                        if (is_array($values)) {
-                            if (is_int($key)) {
-                                $defaultValues = array_merge($defaultValues, $values);
-                            } else {
-                                foreach ($values as $value) {
-                                    $searches[$key][] = '%' . $value . '%';
-                                }
-                            }
-                        } else {
-                            if (is_int($key)) {
-                                $defaultValues[] = $values;
-                            } else {
-                                $searches[$key][] = '%' . $values . '%';
-                            }
-                        }
-                    }
-                    $search = [];
-                    foreach ($searchFields as $searchField) {
-                        foreach ($defaultValues as $values) {
-                            $search[$searchField][] = '%' . $values . '%';
-                        }
-                    }
-                    if (!empty($search)) {
-                        $searches[] = $search;
-                    }
-                } else {
-                    $search = [];
-                    foreach ($searchFields as $searchField) {
-                        $search[$searchField][] = '%' . $params['search'] . '%';
-                    }
-                    if (!empty($search)) {
-                        $searches[] = $search;
-                    }
-                }
-
-                unset($params['search']);
-            }
-            // LIKE 'value%'
-            if (isset($params['search_start'])) {
-                $searchFields = $instance::getDefaultSearch();
-                if (is_array($params['search_start'])) {
-                    $defaultValues = [];
-                    foreach ($params['search_start'] as $key => $values) {
-                        if (is_array($values)) {
-                            if (is_int($key)) {
-                                $defaultValues = array_merge($defaultValues, $values);
-                            } else {
-                                foreach ($values as $value) {
-                                    $searches[$key][] = $value . '%';
-                                }
-                            }
-                        } else {
-                            if (is_int($key)) {
-                                $defaultValues[] = $values;
-                            } else {
-                                $searches[$key][] = $values . '%';
-                            }
-                        }
-                    }
-                    $search = [];
-                    foreach ($searchFields as $searchField) {
-                        foreach ($defaultValues as $values) {
-                            $search[$searchField][] = $values . '%';
-                        }
-                    }
-                    if (!empty($search)) {
-                        $searches[] = $search;
-                    }
-                } else {
-                    $search = [];
-                    foreach ($searchFields as $searchField) {
-                        $search[$searchField][] = $params['search_start'] . '%';
-                    }
-                    if (!empty($search)) {
-                        $searches[] = $search;
-                    }
-                }
-
-                unset($params['search_start']);
-            }
-            // LIKE '%value'
-            if (isset($params['search_end'])) {
-                $searchFields = $instance::getDefaultSearch();
-                if (is_array($params['search_end'])) {
-                    $defaultValues = [];
-                    foreach ($params['search_end'] as $key => $values) {
-                        if (is_array($values)) {
-                            if (is_int($key)) {
-                                $defaultValues = array_merge($defaultValues, $values);
-                            } else {
-                                foreach ($values as $value) {
-                                    $searches[$key][] = '%'. $value;
-                                }
-                            }
-                        } else {
-                            if (is_int($key)) {
-                                $defaultValues[] = $values;
-                            } else {
-                                $searches[$key][] = '%'. $values;
-                            }
-                        }
-                    }
-                    $search = [];
-                    foreach ($searchFields as $searchField) {
-                        foreach ($defaultValues as $values) {
-                            $search[$searchField][] = '%' . $values;
-                        }
-                    }
-                    if (!empty($search)) {
-                        $searches[] = $search;
-                    }
-                } else {
-                    $search = [];
-                    foreach ($searchFields as $searchField) {
-                        $search[$searchField][] = '%' . $params['search_end'];
-                    }
-                    if (!empty($search)) {
-                        $searches[] = $search;
-                    }
-                }
-
-                unset($params['search_end']);
-            }
-
-            /**
-             * set preparedFilters
-             */
-            $preparedFilters = $modelClass::getPreparedFilters();
-            if (isset($params['prepared_filter']) && !empty($preparedFilters)) {
-                if (!is_array($params['prepared_filter'])) {
-                    $requestedFilters = [$params['prepared_filter']];
-                } else {
-                    $requestedFilters = $params['prepared_filter'];
-                }
-
-                foreach ($requestedFilters as $requestedFilter) {
-                    if (isset($preparedFilters[$requestedFilter])) {
-                        $prepFilter = $preparedFilters[$requestedFilter];
-                        foreach ($prepFilter as $partName => $partValue) {
-                            if (is_int($partName)) {
-                                $notEmptyFilters[$partValue] = $partValue;
-                            } else {
-                                $filters[$partName] = $partValue;
-                            }
-                        }
-                    }
-                }
-            }
-
-            /**
-             * set complexFilters
-             */
-            $prepComplexFilters = $modelClass::getPreparedComplexFilters();
-            if (isset($params['prepared_filter']) && !empty($prepComplexFilters)) {
-                if (!is_array($params['prepared_filter'])) {
-                    $requestedFilters = [$params['prepared_filter']];
-                } else {
-                    $requestedFilters = $params['prepared_filter'];
-                }
-
-                foreach ($requestedFilters as $requestedFilter) {
-                    if (isset($prepComplexFilters[$requestedFilter])) {
-                        $complexFilters[$requestedFilter] = $prepComplexFilters[$requestedFilter];
-                    }
-                }
-            }
-
-            /**
-             * set other filters
-             */
-            foreach ($attributes as $attribute) {
-                if (array_key_exists($attribute, $params)) {
-                    $filters[$attribute] = $params[$attribute];
-                    unset($params[$attribute]);
-                }
-            }
-
-            /**
-             * set not empty filters
-             */
-            if (isset($params['not_empty'])) {
-                if (is_array($params['not_empty'])) {
-                    foreach ($attributes as $attribute) {
-                        if (in_array($attribute, $params['not_empty'])) {
-                            $notEmptyFilters[$attribute] = $attribute;
-                        }
-                    }
-                } else {
-                    $notEmptyFilters[$params['not_empty']] = $params['not_empty'];
-                }
-                unset($params['not_empty']);
-            }
-        }
     }
 
     /**
@@ -1315,7 +976,7 @@ trait BaseModelTrait
      * @param string|null $decryptionKey
      */
     private static function filterRelation(Builder &$query, $relation = '', $attribute = [], $value = '',
-                                           $notEmpty = false, $decryptionKey = null)
+        $notEmpty = false, $decryptionKey = null)
     {
         // get entity that has relation with certain attribute value
         $query->whereHas($relation, function (Builder $q) use ($attribute, $value, $notEmpty, $decryptionKey) {
@@ -1361,7 +1022,7 @@ trait BaseModelTrait
      * @param string|null $decryptionKey
      */
     private static function orFilterRelation(Builder &$query, $relation = '', $attribute = [], $values = [],
-                                             $decryptionKey = null)
+        $decryptionKey = null)
     {
         // get entity that has relation with certain attribute value
         $query->orWhereHas($relation, function (Builder $q) use ($relation, $attribute, $values, $decryptionKey) {
@@ -1402,7 +1063,7 @@ trait BaseModelTrait
      * @param string|null $decryptionKey
      */
     private static function searchRelation(Builder &$query, $relation = '', $attribute = [], $value = '',
-                                           $decryptionKey = null)
+        $decryptionKey = null)
     {
         // get entity that has relation with certain attribute LIKE the value
         $query->whereHas($relation, function (Builder $q) use ($attribute, $value, $decryptionKey) {
@@ -1467,7 +1128,7 @@ trait BaseModelTrait
      * @param string|null $decryptionKey
      */
     private static function orSearchRelation(Builder &$query, $relation = '', $attribute = [], $values = [],
-                                             $decryptionKey = null)
+        $decryptionKey = null)
     {
         // get entity that has relation with certain attribute LIKE the value
         $query->orWhereHas($relation, function (Builder $q) use ($attribute, $values, $decryptionKey) {
@@ -1534,74 +1195,60 @@ trait BaseModelTrait
      * Get a single model object from the database, if it matches the $id and possibly given $preSetFilters (possibly
      * including some/all object's relations)
      *
-     * @param int $id
-     * @param array $columns
-     * @param array $preSetFilters
-     * @param array $preSetIncludes
-     * @param int|string|null $preSetPagination
-     * @param string|null $decryptionKey
-     * @return Model
+     * @param int                          $id
+     * @param ExtendedModelParameters|null $extendedParameters
+     * @return Model|null
      */
-    public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = [],
-                                        $preSetPagination = '', $decryptionKey = null)
+    public static function findExtended($id, $extendedParameters = null)
     {
-        $request = request();
-
-        $filters = $preSetFilters;
-        $includes = $preSetIncludes;
-        /** @var Model $modelClass */
+        /* @var $modelClass BaseModelInterface */
         $modelClass = get_called_class();
-
-        $pagination = $preSetPagination !== '' ? $preSetPagination : $modelClass::$pagination;
-
-        $getParams = $request->query();
-        self::extractFromParams(
-            $getParams,
-            $modelClass,
-            $page,
-            $pagination,
-            $includes,
-            $sortings,
-            $filters,
-            $orFilters,
-            $searches,
-            $orSearches
-        );
+        if ($extendedParameters === null) {
+            $extendedParameters = new ExtendedModelParameters();
+            $extendedParameters->setModelClass($modelClass);
+            $extendedParameters->setSortings($modelClass::getDefaultSorting());
+        } elseif ($extendedParameters->getModelClass() !== null) {
+            $modelClass = $extendedParameters->getModelClass();
+        } else {
+            $extendedParameters->setModelClass($modelClass);
+        }
 
         // include relations over multiple levels (->load('relation'))
         $formattedIncludes = [];
+        $includes = $extendedParameters->getIncludes();
         if (!empty($includes)) {
             foreach ($includes as $include) {
                 $formattedIncludes[] = lcfirst(str_replace('_', '', ucwords($include, '_')));
             }
         }
 
+        $entity = null;
         // only return results that match certain filter criteria (->where('field', 'attribute'))
         try {
             /**
              * filtering
              */
-            if (!empty($filters)) {
-                if ($decryptionKey) {
-                    $query = $modelClass::withDecryptKey($decryptionKey)->whereDecrypted('id', '=', $id, $decryptionKey);
+            if (!empty($extendedParameters->getFilters())) {
+                if ($extendedParameters->getDecryptionKey()) {
+                    $query = $modelClass::withDecryptKey($extendedParameters->getDecryptionKey())
+                        ->whereDecrypted('id', '=', $id, $extendedParameters->getDecryptionKey());
                 } else {
                     $query = $modelClass::query()->where('id', $id);
                 }
 
                 // add filters
                 // (->where('field', 'attribute'))
-                self::addFilters($query, $filters);
+                self::addFilters($query, $extendedParameters->getFilters());
 
                 /** @var Model $entity */
-                $entity = $query->with($formattedIncludes)->firstOrFail($columns);
+                $entity = $query->with($formattedIncludes)->firstOrFail($extendedParameters->getColumns());
+            } elseif ($extendedParameters->getDecryptionKey()) {
+                /** @var Model $entity */
+                $entity = $modelClass::withDecryptKey($extendedParameters->getDecryptionKey())->with($formattedIncludes)
+                    ->find($id, $extendedParameters->getColumns());
             } else {
-                if ($decryptionKey) {
-                    /** @var Model $entity */
-                    $entity = $modelClass::withDecryptKey($decryptionKey)->with($formattedIncludes)->find($id, $columns);
-                } else {
-                    /** @var Model $entity */
-                    $entity = $modelClass::with($formattedIncludes)->find($id, $columns);
-                }
+                /** @var Model $entity */
+                $entity = $modelClass::with($formattedIncludes)->find($id, $extendedParameters->getColumns());
             }
         } catch (RelationNotFoundException $e) {
             $message = Lang::get(
