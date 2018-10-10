@@ -209,16 +209,34 @@ iterate through the related objects (and their relations, and their relations, e
 update) on them.
 
 ### 3.6. getValidationRules
+Should only be overwritten if you need special logic, otherwise these rules can be supplied with $validationRules.
+
 expected result: all laravel validation rules (see https://laravel.com/docs/5.3/validation for details on the supported
 rules) that are associated with a related model class.
 possible input: boolean $checkCompletion parameter
+
+If $checkCompletion is true, $validationRules will be prefixed with the required attribute.
 
 If $checkCompletion is true, this method should return all properties with all their necessary validation rules.
 
 If $checkCompletion is false however, the returned rules should support only partial presence of the editable
 properties, to support PATCH requests.
 
-**Example**
+**Example 1**
+```
+// from model class app/Post.php
+
+    $fillable = ['name', 'type', 'author_id'];
+    protected static $validationRules = [
+        'name'      => 'string|min:1|max:255',
+        'type'      => 'string|nullable',
+        'author_id' => 'integer|nullable'
+    ];
+}
+```
+
+
+**Example 2**
 ```
 // from model class app/Post.php
     

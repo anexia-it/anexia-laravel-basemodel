@@ -31,6 +31,8 @@ trait BaseModelTrait
     protected static $pagination = 10;
     /** @var int */
     protected static $maxPagination = 1000;
+    /** @var array */
+    protected static $validationRules = [];
 
     /**
      * BaseModel constructor.
@@ -475,8 +477,23 @@ trait BaseModelTrait
      */
     public static function getValidationRules($checkCompletion = true)
     {
+        $validationRules = self::$validationRules;
+        if (!\is_array($validationRules)) {
+            return [];
+        }
+
+        if ($checkCompletion) {
+            $prefix = 'required';
+            $validationRules = array_map(function ($value) use ($prefix) {
+                if (strpos($value, $prefix) === 0) {
+                    return $value;
+                }
+                return $prefix . '|' . $value;
+            }, $validationRules);
+        }
+
         // return array of all validationRules in each model
-        return [];
+        return $validationRules;
     }
 
     /**
