@@ -74,13 +74,13 @@ Use the BaseModelController to allow 'bulk actions' (create, update, delete) ove
 It comes with the method 'editObjectContents' which expects a BaseModel (implementing the BaseModelInterface and using
 the BaseModelTrait) and the new properties (as array, as provided by a POST/PUT/PATCH request).
 
-It uses the nested transactions* provided by the SubTransactionServiceProvider, which allows better controll over the
+It uses the nested transactions* provided by the SubTransactionServiceProvider, which allows better control over the
 data on multiple related models at once.
 
 
 * The nested transactions are currently only available for PostgreSQL connections
 (via Anexia\BaseModel\Database\PostgresConnection). To support other databases, new Connection classes must be provided,
-that extend the Anexia\BaseModel\Database\Connection to handle mutliple open transactions.
+that extend the Anexia\BaseModel\Database\Connection to handle multiple open transactions.
 
 
 ## 3. Model Configuration Methods
@@ -88,8 +88,8 @@ The BaseModelInterface demands several internal configurations for each model, m
 many in the BaseModelTrait). But if need be, specific alterations of those configuration methods can make any model very
 self-sufficient in regards of validation, change behaviour and other aspects. 
 
-### 3.1. getUnmodifieable
-expected result: array of unmodifieable properties
+### 3.1. getUnmodifiable
+expected result: array of unmodifiable properties
 
 All properties returned by this function will be excluded from the BaseModelController's 'editObjectContents' method.
 Thus, those properties will not be automatically/bulk edited and must be set/changed explicitly.
@@ -104,7 +104,7 @@ instantiation (regardless of whether they are defined as $guarded or $fillable).
 expected result: array of properties that shall be searched by default whenever allExtended is called with 'search'
 parameters. 
 
-Those parameters can either be handed on method calling ($preSetSearches and $preSetOrSearches) or via a
+Those parameters can either be handed on method calling (setSearches and setOrSearches) or via a
 HTTP request (fetched via request()->all() and handled as $searches and $orSearches in the allExtended method).
 All properties returned by the getDefaultSearch function will be searched with the given sub string ('WHERE x LIKE "y"'
 SQL condition), the searches will be OR connected.
@@ -153,7 +153,7 @@ If $list is true, this method should return a simple array of all relation-prope
 ```
 
 If $list is false however, this method should return a more complex representation of the model's relations. It should
-then return a multiarry of 'one' and 'many' relations, according to the relation's nature. Furthermore should each
+then return a multi-array of 'one' and 'many' relations, according to the relation's nature. Furthermore should each
 relation property not only contain the related classes name, but also how the corresponding property on the related
 model is called (inverse side) and whether or not the relation is editable and nullable from the current model's side.
 
@@ -209,16 +209,34 @@ iterate through the related objects (and their relations, and their relations, e
 update) on them.
 
 ### 3.6. getValidationRules
+Should only be overwritten if you need special logic, otherwise these rules can be supplied with $validationRules.
+
 expected result: all laravel validation rules (see https://laravel.com/docs/5.3/validation for details on the supported
 rules) that are associated with a related model class.
 possible input: boolean $checkCompletion parameter
+
+If $checkCompletion is true, $validationRules will be prefixed with the required attribute.
 
 If $checkCompletion is true, this method should return all properties with all their necessary validation rules.
 
 If $checkCompletion is false however, the returned rules should support only partial presence of the editable
 properties, to support PATCH requests.
 
-**Example**
+**Example 1**
+```
+// from model class app/Post.php
+
+    $fillable = ['name', 'type', 'author_id'];
+    protected static $validationRules = [
+        'name'      => 'string|min:1|max:255',
+        'type'      => 'string|nullable',
+        'author_id' => 'integer|nullable'
+    ];
+}
+```
+
+
+**Example 2**
 ```
 // from model class app/Post.php
     
@@ -378,7 +396,7 @@ class Post extends Model implements BaseModelInterface
 }
 ```
 
-2) Comment model defines its relation to the Post model to be ineditable (a change request on a Comment can not
+2) Comment model defines its relation to the Post model to be uneditable (a change request on a Comment can not
 'go upwards' and trigger a change in its Post). 
 ```
 // model class app/Comment.php
@@ -470,8 +488,7 @@ possible parameter configurations during a request - some of them can also be pr
 method in a class (e.g. a REST controller).
 The method definition from the BaseModelInterface looks like this:
 ```
-public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [], $preSetIncludes = [],
-                                   $preSetSearches = [], $preSetOrSearches = []);
+public static function allExtended($extendedParameters = null);
 ```
 
 The 'columns' and 'includes' arrays will affect the model's attributes and relations that will be returned. They do not
@@ -481,28 +498,30 @@ Illuminate\Pagination\LengthAwarePaginator).
 The 'filters' and 'searches' arrays will directly affect the SQL query itself and will be accumulated like this:
 SELECT ... WHERE (
     (
-        $preSetFilters 
+        $filters 
         AND (GET-filters from request)
     ) 
-    OR $preSetOrFilters
+    OR $orFilters
 ) 
 AND (
-    $preSetSearches
-    OR $preSetOrSearches
+    $searches
+    OR $orSearches
 )
 
-The following section will describe how the 'allExtended' method's parameters can be used directly on method call,
+The following section will describe how the 'allExtended' ExtendedModelParameters methods can be used directly on method call,
 regardless of possible HTTP request parameters.
 
 ##### 4.3.1.1. Parameters
 So as the 'add' method once can specify the following configuration when fetching a bunch of objects:
 
-###### 4.3.1.1.1 $columns (first parameter)
+###### 4.3.1.1.1 setColumns
 Plain array that defines the columns (= model's properties), that are to be returned for all found objects. The object
-ids will always be returned, regradless of the settings of the 'columns' variable.
+ids will always be returned, regardless of the settings of the 'columns' variable.
 **Example**
 ```
-Post::allExtended(['name']);
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setColumns(['name']);
+Post::allExtended($extendedParameters);
 ```
 will only return the names (and ids) of all found post entries:
 ```
@@ -521,37 +540,35 @@ will only return the names (and ids) of all found post entries:
 }
 ```
 
-###### 4.3.1.1.2. $preSetFilters (second parameter)
-Multiarray of 'WHERE x = y' filtering conditions that get nested like this:
+###### 4.3.1.1.2. setFilters
+Multi-Array of 'WHERE x = y' filtering conditions that get nested like this:
 ```
-    $preSetFilters = [
-        // AND connected conditions go here (single condition or array)
-    
-        [
-            // OR connected conditions go here (single conditions or array)
-    
-            [
-            
-                // AND connected conditions go here (single condition or array)
-            ], ...
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setFilters([
+    // AND connected conditions go here (single condition or array)
+    [
+        // OR connected conditions go here (single conditions or array)
+
+            // AND connected conditions go here (single condition or array)
         ], ...
-    ];
+    ], ...
+]);
 ```
 **Example**
 ```
-$preSetFilters = [
-    [
-        [
-            'author_id' => null,
-            'catgory_id' => null,
-        ],
-        'author_id' => $curUser->id,
-        'category.genre.supervisor_id' => $curUser->id
-    ],
-    'author_id' => 2
-];
-
-Post::allExtended(null, $preSetFilters);
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setFilters([
+   [
+       [
+           'author_id' => null,
+           'catgory_id' => null,
+       ],
+       'author_id' => $curUser->id,
+       'category.genre.supervisor_id' => $curUser->id
+   ],
+   'author_id' => 2,
+]);
+Post::allExtended($extendedParameters);
 ```
 will result in the following SQL query:
 ```
@@ -575,25 +592,24 @@ select * from posts where (
 )
 ```
 
-###### 4.3.1.1.3. $preSetOrFilters (third parameter)
-Multiarray of 'WHERE ... OR x = y' filtering conditions that get nested like this:
+###### 4.3.1.1.3. setOrFilters
+Multi-Array of 'WHERE ... OR x = y' filtering conditions that get nested like this:
 ```
-    $preSetFilters = [
-        // OR connected conditions go here (single condition or array)
-    
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setOrFilters([
+    // OR connected conditions go here (single condition or array)
+    [
+        // AND connected conditions go here (single condition or array)
         [
-            // AND connected conditions go here (single condition or array)
-    
-            [
-            
-                // OR connected conditions go here (single condition or array)
-            ], ...
+            // OR connected conditions go here (single condition or array)
         ], ...
-    ];
+    ], ...
+]);
 ```
 **Example**
 ```
-$preSetOrFilters = [
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setOrFilters([
    [
        [
            'author_id' => null,
@@ -603,12 +619,8 @@ $preSetOrFilters = [
        'category.genre.supervisor_id' => $curUser->id
    ],
    'author_id' => 2,
-];
-Post::allExtended(
-    ['*'],
-    [],
-    $preSetOrFilters
-);
+]);
+Post::allExtended($extendedParameters);
 ```
 will result in the following SQL query:
 ```
@@ -632,17 +644,17 @@ select * from posts where (
 )
 ```
 
-###### 4.3.1.1.4. $preSetIncludes (fourth parameter)
+###### 4.3.1.1.4. setIncludes
 Plain array of all model relations (their method's names) that are to be included into the resulting list.
+```
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setIncludes(['comments', 'author']);
+```
 **Example**
 ```
-$preSetIncludes = ['comments', 'author'];
-Post::allExtended(
-    ['name'],
-    [],
-    [],
-    $preSetIncludes
-);
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setIncludes(['comments', 'author'])->setColumn(['name']);
+Post::allExtended($extendedParameters);
 ```
 will return the wanted relations' properties along with the found post entries:
 ```
@@ -688,25 +700,25 @@ will return the wanted relations' properties along with the found post entries:
 }
 ```
 
-###### 4.3.1.1.5. $preSetSearches (fifth parameter)
-Multiarray of 'WHERE X LIKE "y"' filtering conditions that get nested like this:
+###### 4.3.1.1.5. setSearches
+Multi-Array of 'WHERE X LIKE "y"' filtering conditions that get nested like this:
 ```
-    $preSetSearches = [
-        // AND connected conditions go here (single condition or array)
-    
-        [
-            // OR connected conditions go here (single conditions or array)
-        ], ...
-    ];
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setSearches([
+    // AND connected conditions go here (single condition or array)
+    [
+        // OR connected conditions go here (single conditions or array)
+    ], ...
+]);
 ```
 **Example**
 ```
-$preSetSearches = [
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setSearches([
     'name' => ['%post%', 'blog%', '%entry'],
     'author_id' => '%1%'
-];
-
-Post::allExtended(null, [], [], [], $preSetSearches);
+]);
+Post::allExtended($extendedParameters);
 ```
 will result in the following SQL query:
 ```
@@ -720,25 +732,26 @@ select * from posts where (((name::TEXT ILIKE '%post%' or name::TEXT ILIKE 'blog
     and author_id::TEXT ILIKE '%1%'))
 ```
 
-###### 4.3.1.1.6. $preSetOrSearches (sixth parameter)
-Multiarray of 'WHERE ... OR X LIKE "y"' filtering conditions that get nested like this:
+###### 4.3.1.1.6. setOrSearches
+Multi-Array of 'WHERE ... OR X LIKE "y"' filtering conditions that get nested like this:
 ```
-    $preSetOrSearches = [
-        // OR connected conditions go here (single condition or array)
-    
-        [
-            // AND connected conditions go here (single conditions or array)
-        ], ...
-    ];
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setOrSearches([
+    // OR connected conditions go here (single condition or array)
+
+    [
+        // AND connected conditions go here (single conditions or array)
+    ], ...
+]);
 ```
 **Example**
 ```
-$preSetOrSearches = [
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setOrSearches([
     'name' => ['%post%', 'blog%', '%entry'],
     'author_id' => '%1%'
-];
-
-Post::allExtended(null, [], [], [], [], $preSetOrSearches);
+]);
+Post::allExtended($extendedParameters);
 ```
 will result in the following SQL query:
 ```
@@ -752,11 +765,11 @@ select * from posts where (((name::TEXT ILIKE '%post%' and name::TEXT ILIKE 'blo
     or author_idvLIKE '%1%'))
 ```
 
-##### 4.3.1.1.7 $preSetPagination (seventh parameter)
+##### 4.3.1.1.7 setPagination (seventh parameter)
 Integer or null to avoid the model's default pagination. Can not exceed the model's $maxPagination value (automatically
 reduced).
 
-##### 4.3.1.1.8 $decryptionKey (eighth parameter)
+##### 4.3.1.1.8 setDecryptionKey (eighth parameter)
 String or null to use for the decryption of encrypted properties of a model that uses the anexia/encryption package.
 If the correct decryption key is given, the encrypted properties will automatically be decrypted and returned. If no
 decryption key is given, the encrypted properties will be excluded from the response.
@@ -774,27 +787,29 @@ possible parameter configurations during a request - some of them can also be pr
 method in a class (e.g. a REST controller).
 The method definition from the BaseModelInterface looks like this:
 ```
-public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = []);
+public static function findExtended($id, $extendedParameters = null);
 ```
 
 The 'columns' and 'includes' arrays will affect the model's attributes and relations that will be returned. They do
 not affect the SQL query itself, but will influence the representation of the resulting object.
 
 The 'filters' array will directly affect the SQL query itself and will be accumulated like this:
-SELECT ... WHERE $preSetFilters
+SELECT ... WHERE $filters
 
-The following section will describe how the 'findExtended' method's parameters can be used directly on method call,
+The following section will describe how the 'findExtended' ExtendedModelParameters methods can be used directly on method call,
 regardless of possible HTTP request parameters.
 
 ##### 4.3.2.1. Parameters
 So as the 'add' method once can specify the following configuration when fetching a bunch of objects:
 
-###### 4.3.2.1.1. $columns (second parameter)
+###### 4.3.2.1.1. setColumns (second parameter)
 Plain array that defines the columns (= model's properties), that are to be returned for the found object. The object
-id will always be returned, regradless of the settings of the 'columns' variable.
+id will always be returned, regardless of the settings of the 'columns' variable.
 **Example**
 ```
-Post::findExtended(1, ['name']);
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setColumns(['name']);
+Post::findExtended(1, $extendedParameters);
 ```
 will only return the name (and id) of the found post entry:
 ```
@@ -806,25 +821,24 @@ will only return the name (and id) of the found post entry:
 }
 ```
 
-###### 4.3.2.1.2. $preSetFilters (third parameter)
-Multiarray of 'WHERE x = y' filtering conditions that get nested like this:
+###### 4.3.2.1.2. setFilters (third parameter)
+Multi-Array of 'WHERE x = y' filtering conditions that get nested like this:
 ```
-    $preSetFilters = [
-        // AND connected conditions go here (single condition or array)
-    
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setFilters([
+    // AND connected conditions go here (single condition or array)
+    [
+        // OR connected conditions go here (single conditions or array)
         [
-            // OR connected conditions go here (single conditions or array)
-    
-            [
-            
-                // AND connected conditions go here (single condition or array)
-            ], ...
+            // AND connected conditions go here (single condition or array)
         ], ...
-    ];
+    ], ...
+]);
 ```
 **Example**
 ```
-$preSetFilters = [
+$extendedParameters = new ExtendedModelParameters();
+$extendedParameters->setFilters([
     [
         [
             'author_id' => null,
@@ -834,22 +848,21 @@ $preSetFilters = [
         'category.genre.supervisor_id' => $curUser->id
     ],
     'author_id' => 2
-];
-
-Post::findExtended(1, null, $preSetFilters);
+]);
+Post::findExtended(1, $extendedParameters);
 ```
 will result in the following SQL query:
 ```
 select * from posts where id = 1 and 
 ```
 
-##### 4.3.2.1.3 $preSetIncludes (fourth parameter)
+##### 4.3.2.1.3 setIncludes (fourth parameter)
 
-##### 4.3.2.1.4 $preSetPagination (fifth parameter)
+##### 4.3.2.1.4 setPagination (fifth parameter)
 Integer or null to avoid the model's default pagination. Can not exceed the model's $maxPagination value (automatically
 reduced).
 
-##### 4.3.2.1.5 $decryptionKey (sixth parameter)
+##### 4.3.2.1.5 setDecryptionKey (sixth parameter)
 String or null to use for the decryption of encrypted properties of a model that uses the anexia/encryption package.
 If the correct decryption key is given, the encrypted properties will automatically be decrypted and returned. If no
 decryption key is given, the encrypted properties will be excluded from the response.
@@ -866,7 +879,7 @@ corresponding info text as 'message'.
 When the BaseModelController's 'editObjectContents' method catches any exception's whatsoever, it puts their message
 (or messages, if multiple exceptions get thrown in the course of the edition of multiple related objects) into a
 BulkValidationException's 'messages' field. The BulkValidationException defaults to a status code 400 and has both a
-'message' field (which by default says 'Error in bulk validation') and a 'messages' field (accessable during the
+'message' field (which by default says 'Error in bulk validation') and a 'messages' field (accessible during the
 'getMessages' method) that contains the collected exception's messages with further details to the actual occurring
 errors.
 
@@ -1030,7 +1043,7 @@ filters only makes sense for queries with more filter values than one.
 
 #### Prepared complex filters
 Other than "simple" prepared filters, which merely represent a combination of straight forward AND / OR filters, a model
-can contain more complex filter structure, including joins or subqueries.
+can contain more complex filter structure, including joins or sub-queries.
 
 **Example**
 Assuming, the post model has a filter "name_shorter_10" defined:
@@ -1118,7 +1131,7 @@ The same applies for the 'search_end' GET parameter that can be used to find sub
 `GET /posts?search_end[type]=test` will return all posts with type LIKE '%test'.
 
 ##### 4.5.3.2. AND Searching (multiple search conditions)
-Whenever multiple 'search', 'search_start', 'seartch_end' parameters are given in the GET request, they are AND
+Whenever multiple 'search', 'search_start', 'search_end' parameters are given in the GET request, they are AND
 connected in the resulting query.
 
 **Example**
@@ -1231,7 +1244,8 @@ To use this method the RestControllerTestCase can be extended (abstract methods 
 
 namespace Tests\Feature\Controllers;
 
-use Anexia\BaseModel\Tests\Feature\Controllers\RestControllerTestCase
+use Anexia\BaseModel\ExtendedModelParameters;
+use Anexia\BaseModel\Tests\Feature\Controllers\RestControllerTestCase;
 use App\Post;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Lang;
@@ -1256,25 +1270,20 @@ class PostControllerTest extends RestControllerTestCase
         $this->assertArrayHasKey('data', $body);
         $data = $body['data'];
         $this->assertInternalType('array', $data);
-        
-        $includes = [
-            // OR connected conditions
 
+        $extendedParameters = new ExtendedModelParameters();
+        $extendedParameters->setIncludes([
+            // OR connected conditions
             [
                 // AND connected conditions
-
                 'therapist_id' => null,
                 'unit_id' => null
             ],
             'therapist_id' => $this->currentUser->id,
             'unit.therapy.therapist_id' => $this->currentUser->id
-        ];
+        ]);
 
-        $posts = Post::allExtended(
-            ['*'],
-            [],
-            $includes
-        );
+        $posts = Post::allExtended($extendedParameters);
 
         // add pagination checks
         $this->runPaginationTests($body, $posts->count());

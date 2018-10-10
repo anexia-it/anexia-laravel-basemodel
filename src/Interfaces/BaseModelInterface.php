@@ -27,7 +27,7 @@ interface BaseModelInterface
     /**
      * @return array
      */
-    public function getUnmodifieable();
+    public function getUnmodifiable();
 
     /**
      * @return array
@@ -46,10 +46,10 @@ interface BaseModelInterface
 
     /**
      * @param boolean|false $list
-     * @param boolean|true $excludeUnmodifieable
+     * @param boolean|true $excludeUnmodifiable
      * @return array
      */
-    public static function getAllRelationships($list = false, $excludeUnmodifieable = true);
+    public static function getAllRelationships($list = false, $excludeUnmodifiable = true);
 
     /**
      * @param boolean|false $list
@@ -73,7 +73,7 @@ interface BaseModelInterface
      * @return bool
      */
     public static function isEditableRelationship(BaseModelInterface $object, $relation, Model $relatedObject = null,
-                                                  $values = []);
+        $values = []);
 
     /**
      * @param $relation
@@ -95,24 +95,18 @@ interface BaseModelInterface
     public function validateAttributeLogic();
 
     /**
-     * @param bool|true $excludeUnmodifieable
+     * @param bool|true $excludeUnmodifiable
      * @return array
      */
-    public function getAllAttributes($excludeUnmodifieable = true);
+    public function getAllAttributes($excludeUnmodifiable = true);
 
     /**
      * Get all models (filtered, sorted, paginated, with their included relation objects) from the database.
      *
-     * @param array $columns
-     * @param array|mixed $preSetFilters
-     * @param array|mixed $preSetOrFilters
-     * @param array|mixed $preSetIncludes
-     * @param array|mixed $preSetSearches
-     * @param array|mixed $preSetOrSearches
+     * @param \Anexia\Basemodel\ExtendedModelParameters|null $extendedParameters
      * @return \Illuminate\Database\Eloquent\Collection|static[]
      */
-    public static function allExtended($columns = ['*'], $preSetFilters = [], $preSetOrFilters = [],
-                                       $preSetIncludes = [], $preSetSearches = [], $preSetOrSearches = []);
+    public static function allExtended($extendedParameters = null);
 
     /**
      * add WHERE conditions to a query
@@ -173,13 +167,11 @@ interface BaseModelInterface
     public static function addIncludes(LengthAwarePaginator &$paginator, $includes = []);
 
     /**
-     * @param array $columns
-     * @param int $id
-     * @param array $preSetFilters
-     * @param array $preSetIncludes
+     * @param int                                            $id
+     * @param \Anexia\Basemodel\ExtendedModelParameters|null $extendedParameters
      * @return Model
      */
-    public static function findExtended($id, $columns = ['*'], $preSetFilters = [], $preSetIncludes = []);
+    public static function findExtended($id, $extendedParameters = null);
 
     /**
      * @param string $relation
