@@ -5,14 +5,8 @@
     "license": "MIT",
     "require": {
         "php": ">=5.6.4",
-        "anexia/laravel-encryption": "dev-master"
+        "anexia/laravel-encryption": "^1.0"
     },
-    "repositories": [
-        {
-            "type": "git",
-            "url": "git@gitlab.anx.local:anexia-developme/anexia-laravel-encryption.git"
-        }
-    ],
     "autoload": {
         "psr-4": {
             "Anexia\\BaseModel\\": "src",
