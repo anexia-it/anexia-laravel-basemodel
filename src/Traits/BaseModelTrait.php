@@ -477,7 +477,7 @@ trait BaseModelTrait
      */
     public static function getValidationRules($checkCompletion = true)
     {
-        $validationRules = self::$validationRules;
+        $validationRules = static::$validationRules;
         if (!\is_array($validationRules)) {
             return [];
         }
